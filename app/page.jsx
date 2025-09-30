@@ -99,37 +99,136 @@ const INITIAL_USER_STATE = {
   frenzyBoostUntil: null,
 };
 
+const UPGRADE_CATEGORIES = {
+  industry: {
+    id: "industry",
+    label: "Factory Systems",
+    blurb: "Scale the nut works with automated roasting and orbital forging.",
+  },
+  click: {
+    id: "click",
+    label: "Manual Offense",
+    blurb: "Sharpen your clicking edge for devastating volleys.",
+  },
+  logistics: {
+    id: "logistics",
+    label: "Logistics",
+    blurb: "Amplify trade hauls and territorial reach.",
+  },
+  warfare: {
+    id: "warfare",
+    label: "Warfare",
+    blurb: "Fortify planets and manipulate invasion tempos.",
+  },
+};
+
 const UPGRADE_DEFS = {
   autoStroker: {
     id: "autoStroker",
+    category: "industry",
     label: "Auto-Stroker",
-    description: "Increases passive nut generation by +2 NPS per level.",
+    description: "Installs basic nut automation adding +2 NPS per level.",
     baseCost: 25,
     costMultiplier: 1.35,
     perLevelNps: 2,
   },
+  roastingKiln: {
+    id: "roastingKiln",
+    category: "industry",
+    label: "Roasting Kiln",
+    description: "Boosts passive nut output by +15% per level.",
+    baseCost: 160,
+    costMultiplier: 1.55,
+    perLevelMultiplier: 0.15,
+    requires: { autoStroker: 3 },
+  },
+  orbitalFoundry: {
+    id: "orbitalFoundry",
+    category: "industry",
+    label: "Orbital Foundry",
+    description: "Forges hull plating that adds +1 base NPS per Auto-Stroker level.",
+    baseCost: 360,
+    costMultiplier: 1.6,
+    perLevelAutoBonus: 1,
+    requires: { autoStroker: 6 },
+  },
   edgeMultiplier: {
     id: "edgeMultiplier",
+    category: "click",
     label: "Edge Multiplier",
     description: "Boosts manual clicks by +0.5 multiplier per level.",
     baseCost: 15,
     costMultiplier: 1.5,
     perLevelClick: 0.5,
   },
+  shellAblator: {
+    id: "shellAblator",
+    category: "click",
+    label: "Shell Ablator",
+    description: "Installs recoil springs granting +0.75 click power per level.",
+    baseCost: 120,
+    costMultiplier: 1.6,
+    perLevelClick: 0.75,
+    requires: { edgeMultiplier: 4 },
+  },
   goonerFlare: {
     id: "goonerFlare",
+    category: "warfare",
     label: "Gooner Flare",
-    description: "Raises frenzied goon event odds by 5% per level.",
+    description: "Raises frenzied goon odds by +5% per level.",
     baseCost: 100,
     costMultiplier: 1.8,
     perLevelChance: 0.05,
   },
+  orbitalTradeNet: {
+    id: "orbitalTradeNet",
+    category: "logistics",
+    label: "Orbital Trade Net",
+    description: "Amplifies trade payouts by +25% per route level.",
+    baseCost: 220,
+    costMultiplier: 1.65,
+    perLevelTrade: 0.25,
+    requiresPlanets: 1,
+  },
+  wormholeBroker: {
+    id: "wormholeBroker",
+    category: "logistics",
+    label: "Wormhole Broker",
+    description: "Cuts claim costs by 10% per level (minimum cost applies).",
+    baseCost: 280,
+    costMultiplier: 1.6,
+    perLevelDiscount: 0.1,
+    requiresPlanets: 2,
+  },
+  commandBridge: {
+    id: "commandBridge",
+    category: "logistics",
+    label: "Command Bridge",
+    description: "Expands fleet control, adding +1 trade route capacity per level.",
+    baseCost: 320,
+    costMultiplier: 1.7,
+    perLevelCapacity: 1,
+    requires: { orbitalTradeNet: 2 },
+  },
+  siegeRelay: {
+    id: "siegeRelay",
+    category: "warfare",
+    label: "Siege Relay",
+    description: "Scrambles enemy shields, reducing effective defense by 1 per level when you attack.",
+    baseCost: 260,
+    costMultiplier: 1.55,
+    perLevelDefensePierce: 1,
+    requiresPlanets: 1,
+  },
 };
+
+const ATTACK_WINDOW_MS = 5 * 60 * 1000;
 
 const TABS = [
   { id: "factory", label: "Factory" },
   { id: "fleet", label: "Fleet" },
   { id: "galaxy", label: "Galaxy" },
+  { id: "arcade", label: "Arcade" },
   { id: "attack", label: "Attack" },
   { id: "defense", label: "Defense" },
 ];
@@ -162,15 +261,109 @@ function formatNumber(value) {
 
 function deriveNps(profile) {
   const autoLevel = getUpgradeLevel(profile, "autoStroker");
-  const base = autoLevel * UPGRADE_DEFS.autoStroker.perLevelNps;
+  if (autoLevel === 0) {
+    return 0;
+  }
+  const foundryLevel = getUpgradeLevel(profile, "orbitalFoundry");
+  const kilnLevel = getUpgradeLevel(profile, "roastingKiln");
+  const perAuto =
+    UPGRADE_DEFS.autoStroker.perLevelNps +
+    foundryLevel * (UPGRADE_DEFS.orbitalFoundry.perLevelAutoBonus || 0);
+  const base = autoLevel * perAuto;
+  const multiplier = 1 + kilnLevel * (UPGRADE_DEFS.roastingKiln.perLevelMultiplier || 0);
+  const frenzyActive = profile?.frenzyBoostUntil && profile.frenzyBoostUntil > Date.now();
+  const total = base * multiplier;
+  return frenzyActive ? total * 2 : total;
+}
+
+function deriveClickMultiplier(profile) {
+  const base =
+    1 +
+    getUpgradeLevel(profile, "edgeMultiplier") * UPGRADE_DEFS.edgeMultiplier.perLevelClick +
+    getUpgradeLevel(profile, "shellAblator") * (UPGRADE_DEFS.shellAblator.perLevelClick || 0);
   const frenzyActive = profile?.frenzyBoostUntil && profile.frenzyBoostUntil > Date.now();
   return frenzyActive ? base * 2 : base;
 }
 
-function deriveClickMultiplier(profile) {
-  const base = 1 + getUpgradeLevel(profile, "edgeMultiplier") * UPGRADE_DEFS.edgeMultiplier.perLevelClick;
-  const frenzyActive = profile?.frenzyBoostUntil && profile.frenzyBoostUntil > Date.now();
-  return frenzyActive ? base * 2 : base;
+function getOwnedPlanetCount(profile, planets) {
+  if (!profile || !planets) {
+    return 0;
+  }
+  return planets.filter((planet) => planet.ownerId === profile.userId).length;
+}
+
+function deriveTradeRoutePayout(profile) {
+  const base = 500;
+  const tradeLevel = getUpgradeLevel(profile, "orbitalTradeNet");
+  const multiplier = 1 + tradeLevel * (UPGRADE_DEFS.orbitalTradeNet.perLevelTrade || 0);
+  return Math.floor(base * multiplier);
+}
+
+function getFleetCapacity(profile) {
+  const base = profile?.fleetSize ?? 0;
+  const bonus = getUpgradeLevel(profile, "commandBridge") * (UPGRADE_DEFS.commandBridge.perLevelCapacity || 0);
+  return base + bonus;
+}
+
+function getNextShipCost(profile) {
+  const fleetSize = profile?.fleetSize ?? 0;
+  return Math.floor(200 * Math.pow(1.65, fleetSize));
+}
+
+function getClaimCost(profile, planets) {
+  const owned = getOwnedPlanetCount(profile, planets);
+  const baseCost = 400 + owned * 250;
+  const discountLevel = getUpgradeLevel(profile, "wormholeBroker");
+  const rawDiscount = discountLevel * (UPGRADE_DEFS.wormholeBroker.perLevelDiscount || 0);
+  const discount = Math.min(rawDiscount, 0.6);
+  return Math.max(150, Math.floor(baseCost * (1 - discount)));
+}
+
+function getDefenseUpgradeCost(planet) {
+  const level = planet?.defenseLevel ?? 1;
+  return Math.floor(300 * Math.pow(1.45, level - 1));
+}
+
+function isUpgradeUnlocked(profile, upgrade, planets) {
+  if (!upgrade) {
+    return true;
+  }
+  if (!profile) {
+    return false;
+  }
+  if (upgrade.requires) {
+    const meetsTree = Object.entries(upgrade.requires).every(([id, level]) => getUpgradeLevel(profile, id) >= level);
+    if (!meetsTree) {
+      return false;
+    }
+  }
+  if (upgrade.requiresPlanets) {
+    const ownedPlanets = getOwnedPlanetCount(profile, planets || []);
+    if (ownedPlanets < upgrade.requiresPlanets) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function getUpgradeUnlockText(upgrade) {
+  const parts = [];
+  if (upgrade.requires) {
+    Object.entries(upgrade.requires).forEach(([id, level]) => {
+      const ref = UPGRADE_DEFS[id];
+      parts.push(`${ref?.label || id} Lv ${level}`);
+    });
+  }
+  if (upgrade.requiresPlanets) {
+    parts.push(`${upgrade.requiresPlanets} owned planet${upgrade.requiresPlanets > 1 ? "s" : ""}`);
+  }
+  return parts.join(", ");
+}
+
+function deriveEffectiveDefenseLevel(planetDefense, attackerProfile) {
+  const pierceLevel = getUpgradeLevel(attackerProfile, "siegeRelay");
+  const pierce = pierceLevel * (UPGRADE_DEFS.siegeRelay.perLevelDefensePierce || 0);
+  return Math.max(1, Math.round((planetDefense ?? 1) - pierce));
 }
 
 function generateFallbackPlanets() {
@@ -187,6 +380,11 @@ function generateFallbackPlanets() {
       defenseLevel: 1 + (index % 5),
       tradeRouteActive: false,
       isUnderAttack: false,
+      attackerId: null,
+      attackerUsername: null,
+      attackInitiatedAt: null,
+      attackEndsAt: null,
+      attackToken: null,
     };
   });
 }
@@ -321,9 +519,11 @@ function useUserProfile(db, ready, user, previewMode) {
 
 const DEFENSE_SEQUENCE_COLORS = ["bg-amber-400", "bg-emerald-400", "bg-blue-400", "bg-rose-400"];
 
-function SpaceInvadersMinigame({ defenseLevel, onComplete, onCancel }) {
+function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onCancel }) {
   const canvasRef = useRef(null);
-  const [message, setMessage] = useState("Clear 3 waves to plant the bomb.");
+  const [message, setMessage] = useState(
+    practice ? "Clear 3 waves to complete the simulation." : "Clear 3 waves to plant the bomb."
+  );
   const waveRef = useRef(1);
   const playerRef = useRef({ x: 280, y: 360, width: 40, height: 16, speed: 4 });
   const bulletsRef = useRef([]);
@@ -366,7 +566,7 @@ function SpaceInvadersMinigame({ defenseLevel, onComplete, onCancel }) {
       bulletsRef.current = [];
       enemyBulletsRef.current = [];
       createWave(waveRef.current);
-      setMessage("Wave 1");
+      setMessage(practice ? "Simulation Wave 1" : "Wave 1");
     };
 
     resetGame();
@@ -526,9 +726,9 @@ function SpaceInvadersMinigame({ defenseLevel, onComplete, onCancel }) {
         if (waveRef.current > 3) {
           cancelAnimationFrame(animationRef.current);
           onComplete?.(true);
-          setMessage("Bomb planted! Await defender response.");
+          setMessage(practice ? "Simulation complete!" : "Bomb planted! Await defender response.");
         } else {
-          setMessage(`Wave ${waveRef.current}`);
+          setMessage(practice ? `Simulation Wave ${waveRef.current}` : `Wave ${waveRef.current}`);
           createWave(waveRef.current);
         }
       }
@@ -541,18 +741,23 @@ function SpaceInvadersMinigame({ defenseLevel, onComplete, onCancel }) {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [defenseLevel, onComplete]);
+  }, [defenseLevel, onComplete, practice]);
 
   return (
     <div className="retro-panel space-y-4 p-6 text-emerald-100">
       <div className="flex items-center justify-between">
-        <h3 className="retro-subheading text-lg font-semibold text-emerald-200">Space Invaders Offensive</h3>
+        <div>
+          <h3 className="retro-subheading text-lg font-semibold text-emerald-200">
+            {practice ? "Space Invaders Training" : "Space Invaders Offensive"}
+          </h3>
+          <p className="text-xs uppercase tracking-[0.25em] text-emerald-200/70">Defense Level {defenseLevel}</p>
+        </div>
         <button
           type="button"
           className="retro-button retro-button--danger px-4 py-1 text-xs"
           onClick={onCancel}
         >
-          Cancel
+          {practice ? "Exit" : "Cancel"}
         </button>
       </div>
       <p className="text-sm text-emerald-200/80">{message}</p>
@@ -567,13 +772,15 @@ function SpaceInvadersMinigame({ defenseLevel, onComplete, onCancel }) {
   );
 }
 
-function DefenseMinigame({ defenseLevel, onComplete, onCancel }) {
+function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, practice = false, onComplete, onCancel }) {
   const [sequence, setSequence] = useState([]);
   const [inputIndex, setInputIndex] = useState(0);
   const [round, setRound] = useState(0);
   const [isShowing, setIsShowing] = useState(false);
   const [displayIndex, setDisplayIndex] = useState(-1);
   const targetRounds = 3;
+  const [timeLeft, setTimeLeft] = useState(() => (attackDeadline ? attackDeadline - Date.now() : null));
+  const endedRef = useRef(false);
 
   const sequenceLength = useMemo(() => Math.min(8, 4 + defenseLevel), [defenseLevel]);
   const displaySpeed = useMemo(() => Math.max(400 - defenseLevel * 25, 120), [defenseLevel]);
@@ -594,6 +801,29 @@ function DefenseMinigame({ defenseLevel, onComplete, onCancel }) {
     }, displaySpeed);
     return () => clearTimeout(timeout);
   }, [displayIndex, displaySpeed, isShowing, sequence.length]);
+
+  useEffect(() => {
+    if (practice || !attackDeadline) {
+      return undefined;
+    }
+    const tick = () => {
+      const remaining = attackDeadline - Date.now();
+      if (remaining <= 0 && !endedRef.current) {
+        endedRef.current = true;
+        setTimeLeft(0);
+        onComplete?.(false);
+      } else {
+        setTimeLeft(Math.max(0, remaining));
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [attackDeadline, onComplete, practice]);
+
+  useEffect(() => {
+    endedRef.current = false;
+  }, [attackDeadline, practice]);
 
   const startRound = () => {
     const nextSequence = Array.from({ length: sequenceLength }).map(() =>
@@ -635,12 +865,19 @@ function DefenseMinigame({ defenseLevel, onComplete, onCancel }) {
           className="retro-button retro-button--danger px-4 py-1 text-xs"
           onClick={onCancel}
         >
-          Leave
+          {practice ? "Exit" : "Leave"}
         </button>
       </div>
       <p className="text-sm text-emerald-200/80">
-        Repeat {targetRounds} sequences to diffuse the bomb. Difficulty scales with defense level.
+        {practice
+          ? "Run simulations to memorize the sequence order. Difficulty scales with defense level."
+          : `Repeat ${targetRounds} sequences to diffuse the bomb from ${attackerUsername || "an invader"}.`}
       </p>
+      {!practice && typeof timeLeft === "number" && (
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-rose-200">
+          Time Remaining: {`${Math.max(0, Math.floor(timeLeft / 60000))}:${String(Math.floor((timeLeft % 60000) / 1000)).padStart(2, "0")}`}
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-4">
         {DEFENSE_SEQUENCE_COLORS.map((color, index) => (
           <button
@@ -662,7 +899,7 @@ function DefenseMinigame({ defenseLevel, onComplete, onCancel }) {
         className="retro-button"
         onClick={startRound}
       >
-        {round === 0 ? "Begin Defense" : "Replay Sequence"}
+        {round === 0 ? (practice ? "Begin Simulation" : "Begin Defense") : "Replay Sequence"}
       </button>
     </div>
   );
@@ -705,7 +942,18 @@ function Leaderboard({ planets }) {
   );
 }
 
-function GalaxyMap({ planets, currentUserId, homePlanetId, onClaimPlanet, onAttackPlanet, onToggleTradeRoute }) {
+function GalaxyMap({ planets, profile, onClaimPlanet, onAttackPlanet, onToggleTradeRoute, onUpgradeDefense }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const currentUserId = profile?.userId;
+  const homePlanetId = profile?.homePlanetId;
+  const claimCost = getClaimCost(profile, planets);
+  const hasShip = (profile?.fleetSize ?? 0) > 0;
+
   return (
     <div className="retro-panel space-y-4 p-6 text-emerald-100">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -718,6 +966,14 @@ function GalaxyMap({ planets, currentUserId, homePlanetId, onClaimPlanet, onAtta
           const isPlayer = planet.ownerId === currentUserId;
           const isHome = planet.planetId === homePlanetId;
           const isUnderAttack = planet.isUnderAttack;
+          const defenseLevel = planet.defenseLevel;
+          const timeRemaining = planet.attackEndsAt ? Math.max(0, planet.attackEndsAt - now) : null;
+          const countdown = timeRemaining
+            ? `${Math.floor(timeRemaining / 60000)}:${String(Math.floor((timeRemaining % 60000) / 1000)).padStart(2, "0")}`
+            : null;
+          const defenseCost = getDefenseUpgradeCost(planet);
+          const defenseMaxed = defenseLevel >= 10;
+          const canUpgradeDefense = (profile?.nuts ?? 0) >= defenseCost && !defenseMaxed;
           const cardColor = isUnderAttack
             ? PLANET_COLORS.attack
             : isPlayer
@@ -732,41 +988,74 @@ function GalaxyMap({ planets, currentUserId, homePlanetId, onClaimPlanet, onAtta
                 <div className="flex items-center justify-between">
                   <h4 className="text-lg font-semibold text-emerald-100">
                     {planet.name}
-                    {isHome && <span className="retro-chip ml-2 inline-block px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.25em]">Home</span>}
+                    {isHome && (
+                      <span className="retro-chip ml-2 inline-block px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.25em]">
+                        Home
+                      </span>
+                    )}
                   </h4>
                   <span className="retro-chip inline-block px-2 py-1 text-[0.6rem] font-bold uppercase tracking-[0.25em]">
                     {planet.function}
                   </span>
                 </div>
                 <p className="text-sm text-emerald-100">
-                  Defense Level: <span className="font-semibold">{planet.defenseLevel}</span>
+                  Defense Level: <span className="font-semibold">{defenseLevel}</span>
                 </p>
                 <p className="text-xs text-emerald-200/70">
-                  Status: {isUnderAttack ? "Under Attack" : isUnclaimed ? "Unclaimed" : `Controlled by ${planet.ownerUsername}`}
+                  {isUnderAttack
+                    ? `Under attack by ${planet.attackerUsername || "Unknown"}`
+                    : isUnclaimed
+                    ? "Unclaimed"
+                    : `Controlled by ${planet.ownerUsername}`}
                 </p>
+                {countdown && (
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-rose-200">Timer: {countdown}</p>
+                )}
               </div>
-              <div className="mt-4 space-y-2">
+              <div className="mt-4 space-y-2 text-xs">
                 {isUnclaimed ? (
-                  <button
-                    type="button"
-                    className="retro-button w-full"
-                    onClick={() => onClaimPlanet?.(planet)}
-                  >
-                    Claim Planet
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className={`retro-button w-full ${
+                        !hasShip || (profile?.nuts ?? 0) < claimCost ? "cursor-not-allowed opacity-40" : ""
+                      }`}
+                      onClick={() => hasShip && (profile?.nuts ?? 0) >= claimCost && onClaimPlanet?.(planet)}
+                      disabled={!hasShip || (profile?.nuts ?? 0) < claimCost}
+                    >
+                      Claim for {formatNumber(claimCost)} nuts
+                    </button>
+                    <p className="text-[0.65rem] text-emerald-200/70">Requires an available Nut Ship.</p>
+                  </>
                 ) : isPlayer ? (
-                  <button
-                    type="button"
-                    className="retro-button w-full"
-                    onClick={() => onToggleTradeRoute?.(planet)}
-                  >
-                    {planet.tradeRouteActive ? "Deactivate" : "Activate"} Trade Route
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className={`retro-button w-full ${planet.isUnderAttack ? "cursor-not-allowed opacity-40" : ""}`}
+                      onClick={() => !planet.isUnderAttack && onToggleTradeRoute?.(planet)}
+                      disabled={planet.isUnderAttack}
+                    >
+                      {planet.tradeRouteActive ? "Deactivate" : "Activate"} Trade Route
+                    </button>
+                    <button
+                      type="button"
+                      className={`retro-button w-full ${
+                        !canUpgradeDefense ? "cursor-not-allowed opacity-40" : ""
+                      }`}
+                      onClick={() => canUpgradeDefense && onUpgradeDefense?.(planet)}
+                      disabled={!canUpgradeDefense}
+                    >
+                      {defenseMaxed ? "Defense Maxed" : `Upgrade Defense (${formatNumber(defenseCost)})`}
+                    </button>
+                  </>
                 ) : (
                   <button
                     type="button"
-                    className="retro-button retro-button--danger w-full"
-                    onClick={() => onAttackPlanet?.(planet)}
+                    className={`retro-button retro-button--danger w-full ${
+                      planet.isUnderAttack ? "cursor-not-allowed opacity-40" : ""
+                    }`}
+                    onClick={() => !planet.isUnderAttack && onAttackPlanet?.(planet)}
+                    disabled={planet.isUnderAttack}
                   >
                     Attack Planet
                   </button>
@@ -781,9 +1070,10 @@ function GalaxyMap({ planets, currentUserId, homePlanetId, onClaimPlanet, onAtta
 }
 
 function FleetManagement({ profile, onBuyShip, onToggleTradeRoute, planets }) {
-  const nextShipCost = useMemo(() => {
-    return Math.floor(200 * Math.pow(1.65, profile?.fleetSize ?? 0));
-  }, [profile?.fleetSize]);
+  const nextShipCost = useMemo(() => getNextShipCost(profile), [profile]);
+  const tradePayout = useMemo(() => deriveTradeRoutePayout(profile), [profile]);
+  const routeCapacity = useMemo(() => getFleetCapacity(profile), [profile]);
+  const routesUsed = profile?.tradeRoutes?.length || 0;
   const ownedPlanets = useMemo(
     () => planets.filter((planet) => planet.ownerId === profile?.userId),
     [planets, profile?.userId]
@@ -802,13 +1092,17 @@ function FleetManagement({ profile, onBuyShip, onToggleTradeRoute, planets }) {
             <p className="mt-1 text-2xl font-bold text-emerald-200">{profile?.fleetSize ?? 0}</p>
           </div>
           <div className="retro-chip px-5 py-3">
+            <p className="text-[0.55rem] uppercase tracking-[0.3em] text-emerald-200/70">Trade Capacity</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-200">{routesUsed} / {routeCapacity}</p>
+          </div>
+          <div className="retro-chip px-5 py-3">
             <p className="text-[0.55rem] uppercase tracking-[0.3em] text-emerald-200/70">Next Ship Cost</p>
             <p className="mt-1 text-2xl font-bold text-emerald-200">{formatNumber(nextShipCost)} nuts</p>
           </div>
           <button
             type="button"
             className="retro-button"
-            onClick={() => onBuyShip(nextShipCost)}
+            onClick={() => onBuyShip()}
           >
             Buy Nut Ship
           </button>
@@ -831,7 +1125,7 @@ function FleetManagement({ profile, onBuyShip, onToggleTradeRoute, planets }) {
                   <p className="font-semibold text-emerald-100">{planet.name}</p>
                   <p className="text-xs text-emerald-200/70">
                     {planet.tradeRouteActive
-                      ? "Route active: delivering 500 nuts every 5 minutes"
+                      ? `Route active: delivering ${formatNumber(tradePayout)} nuts every 5 minutes`
                       : "Route idle: deploy a ship to begin shipments"}
                   </p>
                 </div>
@@ -855,32 +1149,150 @@ function FleetManagement({ profile, onBuyShip, onToggleTradeRoute, planets }) {
   );
 }
 
-function UpgradePanel({ profile, onPurchase }) {
+function ArcadeDeck({ onPracticeAttack, onPracticeDefense }) {
+  const [attackLevel, setAttackLevel] = useState(4);
+  const [defenseLevel, setDefenseLevel] = useState(4);
+
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      {Object.values(UPGRADE_DEFS).map((upgrade) => {
-        const level = getUpgradeLevel(profile, upgrade.id);
-        const cost = getUpgradeCost(profile, upgrade);
-        return (
-          <div
-            key={upgrade.id}
-            className="retro-panel p-5 text-emerald-100"
+    <div className="retro-panel space-y-6 p-6 text-emerald-100">
+      <div>
+        <h3 className="retro-subheading text-xl font-semibold text-emerald-200">Arcade Simulator</h3>
+        <p className="mt-2 text-sm text-emerald-200/70">
+          Practice both invasion and defense minigames without risking your holdings.
+        </p>
+      </div>
+      <div className="grid gap-5 md:grid-cols-2">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-xs uppercase tracking-[0.25em] text-emerald-200/70">
+            <span>Attack Difficulty</span>
+            <span>Lv {attackLevel}</span>
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={attackLevel}
+            onChange={(event) => setAttackLevel(Number(event.target.value))}
+            className="w-full accent-emerald-400"
+          />
+          <button
+            type="button"
+            className="retro-button w-full"
+            onClick={() => onPracticeAttack?.(attackLevel)}
           >
-            <div className="flex items-center justify-between">
-              <h4 className="retro-subheading text-lg font-semibold text-emerald-200">{upgrade.label}</h4>
-              <span className="text-xs uppercase tracking-[0.3em] text-emerald-200/70">Lvl {level}</span>
+            Launch Invasion Drill
+          </button>
+        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-xs uppercase tracking-[0.25em] text-emerald-200/70">
+            <span>Defense Difficulty</span>
+            <span>Lv {defenseLevel}</span>
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={defenseLevel}
+            onChange={(event) => setDefenseLevel(Number(event.target.value))}
+            className="w-full accent-emerald-400"
+          />
+          <button
+            type="button"
+            className="retro-button w-full"
+            onClick={() => onPracticeDefense?.(defenseLevel)}
+          >
+            Start Defense Drill
+          </button>
+        </div>
+      </div>
+      <p className="text-xs text-emerald-200/70">
+        Simulations use level-based difficulty but do not affect real planets or resources.
+      </p>
+    </div>
+  );
+}
+
+function UpgradePanel({ profile, planets, onPurchase }) {
+  const describeUpgradeEffect = useCallback((upgrade) => {
+    if (upgrade.perLevelNps) {
+      return `+${upgrade.perLevelNps} NPS per level`;
+    }
+    if (upgrade.perLevelMultiplier) {
+      return `+${Math.round(upgrade.perLevelMultiplier * 100)}% passive output per level`;
+    }
+    if (upgrade.perLevelAutoBonus) {
+      return `+${upgrade.perLevelAutoBonus} NPS to each Auto-Stroker`;
+    }
+    if (upgrade.perLevelClick) {
+      return `+${upgrade.perLevelClick.toFixed(2)} click power per level`;
+    }
+    if (upgrade.perLevelChance) {
+      return `+${Math.round(upgrade.perLevelChance * 100)}% frenzy odds per level`;
+    }
+    if (upgrade.perLevelTrade) {
+      return `+${Math.round(upgrade.perLevelTrade * 100)}% trade yield per level`;
+    }
+    if (upgrade.perLevelDiscount) {
+      return `-${Math.round(upgrade.perLevelDiscount * 100)}% claim cost per level`;
+    }
+    if (upgrade.perLevelCapacity) {
+      return `+${upgrade.perLevelCapacity} trade slots per level`;
+    }
+    if (upgrade.perLevelDefensePierce) {
+      return `-${upgrade.perLevelDefensePierce} defense level when attacking per level`;
+    }
+    return "Scales with level.";
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      {Object.values(UPGRADE_CATEGORIES).map((category) => {
+        const upgrades = Object.values(UPGRADE_DEFS).filter((entry) => entry.category === category.id);
+        return (
+          <div key={category.id} className="space-y-3">
+            <div>
+              <h5 className="retro-subheading text-sm font-semibold uppercase tracking-[0.35em] text-emerald-200/80">
+                {category.label}
+              </h5>
+              <p className="text-xs text-emerald-200/70">{category.blurb}</p>
             </div>
-            <p className="mt-3 text-sm text-emerald-200/80">{upgrade.description}</p>
-            <p className="mt-4 text-sm font-semibold text-emerald-200">
-              Cost: {formatNumber(cost)} nuts
-            </p>
-            <button
-              type="button"
-              className="retro-button mt-4 w-full"
-              onClick={() => onPurchase(upgrade)}
-            >
-              Purchase
-            </button>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {upgrades.map((upgrade) => {
+                const level = getUpgradeLevel(profile, upgrade.id);
+                const cost = getUpgradeCost(profile, upgrade);
+                const unlocked = isUpgradeUnlocked(profile, upgrade, planets);
+                const canAfford = (profile?.nuts ?? 0) >= cost;
+                const unlockText = getUpgradeUnlockText(upgrade);
+                return (
+                  <div key={upgrade.id} className="retro-panel p-5 text-emerald-100">
+                    <div className="flex items-center justify-between">
+                      <h4 className="retro-subheading text-lg font-semibold text-emerald-200">{upgrade.label}</h4>
+                      <span className="text-xs uppercase tracking-[0.3em] text-emerald-200/70">Lv {level}</span>
+                    </div>
+                    <p className="mt-3 text-sm text-emerald-200/80">{upgrade.description}</p>
+                    <p className="mt-3 text-xs uppercase tracking-[0.25em] text-emerald-200/60">
+                      {describeUpgradeEffect(upgrade)}
+                    </p>
+                    <p className="mt-4 text-sm font-semibold text-emerald-200">
+                      Cost: {formatNumber(cost)} nuts
+                    </p>
+                    {unlockText && !unlocked && (
+                      <p className="mt-2 text-xs text-emerald-200/60">Requires: {unlockText}</p>
+                    )}
+                    <button
+                      type="button"
+                      className={`retro-button mt-4 w-full ${
+                        !unlocked || !canAfford ? "cursor-not-allowed opacity-40" : ""
+                      }`}
+                      onClick={() => unlocked && onPurchase(upgrade)}
+                      disabled={!unlocked || !canAfford}
+                    >
+                      {unlocked ? (canAfford ? "Purchase" : "Insufficient nuts") : "Locked"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         );
       })}
@@ -1043,7 +1455,10 @@ function NutButton({ onClick, frenzyActive }) {
   );
 }
 
-function FactoryTab({ profile, onClick, onPurchaseUpgrade, frenzyActive }) {
+function FactoryTab({ profile, planets, onClick, onPurchaseUpgrade, frenzyActive }) {
+  const tradePayout = deriveTradeRoutePayout(profile);
+  const routesUsed = profile?.tradeRoutes?.length || 0;
+  const routeCapacity = getFleetCapacity(profile);
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[1fr,2fr]">
@@ -1060,6 +1475,22 @@ function FactoryTab({ profile, onClick, onPurchaseUpgrade, frenzyActive }) {
               {deriveNps(profile).toFixed(1)} NPS • Click Multiplier ×{deriveClickMultiplier(profile).toFixed(2)}
             </div>
             <NutButton onClick={onClick} frenzyActive={frenzyActive} />
+            <div className="mt-4 grid w-full grid-cols-1 gap-3 text-left text-xs sm:grid-cols-3">
+              <div className="retro-chip">
+                <p className="uppercase tracking-[0.25em] text-emerald-200/70">Trade Yield</p>
+                <p className="mt-1 text-sm font-semibold text-emerald-100">{formatNumber(tradePayout)} nuts / route</p>
+              </div>
+              <div className="retro-chip">
+                <p className="uppercase tracking-[0.25em] text-emerald-200/70">Routes Active</p>
+                <p className="mt-1 text-sm font-semibold text-emerald-100">
+                  {routesUsed} / {routeCapacity}
+                </p>
+              </div>
+              <div className="retro-chip">
+                <p className="uppercase tracking-[0.25em] text-emerald-200/70">Fleet Size</p>
+                <p className="mt-1 text-sm font-semibold text-emerald-100">{profile?.fleetSize ?? 0}</p>
+              </div>
+            </div>
           </div>
         </div>
         <div className="retro-panel p-6 text-emerald-100">
@@ -1068,7 +1499,7 @@ function FactoryTab({ profile, onClick, onPurchaseUpgrade, frenzyActive }) {
             Balance your production chain with synergistic upgrades. Costs scale exponentially, so diversify investments.
           </p>
           <div className="mt-4">
-            <UpgradePanel profile={profile} onPurchase={onPurchaseUpgrade} />
+            <UpgradePanel profile={profile} planets={planets} onPurchase={onPurchaseUpgrade} />
           </div>
         </div>
       </div>
@@ -1087,6 +1518,7 @@ export default function NutInvadersApp() {
   const [activeTab, setActiveTab] = useState("factory");
   const [attackTarget, setAttackTarget] = useState(null);
   const [defenseTarget, setDefenseTarget] = useState(null);
+  const resolvedAttacks = useRef(new Set());
 
   const frenzyActive = profile?.frenzyBoostUntil && profile.frenzyBoostUntil > Date.now();
 
@@ -1225,6 +1657,9 @@ export default function NutInvadersApp() {
       if (!prev) {
         return prev;
       }
+      if (!isUpgradeUnlocked(prev, upgrade, planets)) {
+        return prev;
+      }
       const cost = getUpgradeCost(prev, upgrade);
       if (prev.nuts < cost) {
         return prev;
@@ -1245,12 +1680,16 @@ export default function NutInvadersApp() {
     });
   };
 
-  const handleBuyShip = (cost) => {
+  const handleBuyShip = () => {
     if (!profile) {
       return;
     }
     setProfile((prev) => {
-      if (!prev || prev.nuts < cost) {
+      if (!prev) {
+        return prev;
+      }
+      const cost = getNextShipCost(prev);
+      if (prev.nuts < cost) {
         return prev;
       }
       const next = {
@@ -1258,6 +1697,8 @@ export default function NutInvadersApp() {
         nuts: prev.nuts - cost,
         fleetSize: prev.fleetSize + 1,
       };
+      next.nutsPerSecond = deriveNps(next);
+      next.clickMultiplier = deriveClickMultiplier(next);
       flushProfile(next);
       return next;
     });
@@ -1289,31 +1730,218 @@ export default function NutInvadersApp() {
     [firebase.db, firebase.ready, updatePlanetLocally]
   );
 
+  const initiatePlanetAttack = useCallback(
+    async (planet) => {
+      if (!user) {
+        return null;
+      }
+      const now = Date.now();
+      const token = `${user.uid}-${planet.planetId}-${now}`;
+      const payload = {
+        isUnderAttack: true,
+        attackerId: user.uid,
+        attackerUsername: profile?.username || user.displayName || user.email?.split("@")[0] || "Unknown",
+        attackInitiatedAt: now,
+        attackEndsAt: now + ATTACK_WINDOW_MS,
+        attackToken: token,
+      };
+      updatePlanetLocally(planet.planetId, payload);
+      if (!firebase.ready || !firebase.db) {
+        return token;
+      }
+      const planetRef = doc(firebase.db, "artifacts", APP_ID, "public", "data", "planets", planet.planetId);
+      try {
+        await runTransaction(firebase.db, async (transaction) => {
+          const snapshot = await transaction.get(planetRef);
+          if (!snapshot.exists()) {
+            throw new Error("Planet missing");
+          }
+          const data = snapshot.data();
+          if (data.isUnderAttack) {
+            throw new Error("Planet already under attack");
+          }
+          transaction.update(planetRef, {
+            ...payload,
+            updatedAt: serverTimestamp(),
+          });
+        });
+        return token;
+      } catch (err) {
+        console.error("Failed to initiate attack", err);
+        updatePlanetLocally(planet.planetId, {
+          isUnderAttack: planet.isUnderAttack,
+          attackerId: planet.attackerId || null,
+          attackerUsername: planet.attackerUsername || null,
+          attackInitiatedAt: planet.attackInitiatedAt || null,
+          attackEndsAt: planet.attackEndsAt || null,
+          attackToken: planet.attackToken || null,
+        });
+        return null;
+      }
+    },
+    [firebase.db, firebase.ready, profile?.username, updatePlanetLocally, user]
+  );
+
+  const finalizePlanetAttack = useCallback(
+    async (planet, defenderSucceeded) => {
+      if (!planet) {
+        return;
+      }
+      const resetPayload = {
+        isUnderAttack: false,
+        attackerId: null,
+        attackerUsername: null,
+        attackInitiatedAt: null,
+        attackEndsAt: null,
+        attackToken: null,
+      };
+      const ownerUpdate = defenderSucceeded
+        ? {}
+        : {
+            ownerId: planet.attackerId || null,
+            ownerUsername: planet.attackerUsername || null,
+            tradeRouteActive: false,
+          };
+      updatePlanetLocally(planet.planetId, {
+        ...resetPayload,
+        ...ownerUpdate,
+      });
+      if (!firebase.ready || !firebase.db) {
+        return;
+      }
+      const planetRef = doc(firebase.db, "artifacts", APP_ID, "public", "data", "planets", planet.planetId);
+      try {
+        await runTransaction(firebase.db, async (transaction) => {
+          const snapshot = await transaction.get(planetRef);
+          if (!snapshot.exists()) {
+            return;
+          }
+          const data = snapshot.data();
+          if (planet.attackToken && data.attackToken && planet.attackToken !== data.attackToken) {
+            return;
+          }
+          const updates = {
+            ...resetPayload,
+            updatedAt: serverTimestamp(),
+          };
+          if (!defenderSucceeded) {
+            updates.ownerId = data.attackerId || planet.attackerId || null;
+            updates.ownerUsername = data.attackerUsername || planet.attackerUsername || null;
+            updates.tradeRouteActive = false;
+          }
+          transaction.update(planetRef, updates);
+        });
+      } catch (err) {
+        console.error("Failed to resolve attack", err);
+      }
+    },
+    [firebase.db, firebase.ready, updatePlanetLocally]
+  );
+
   const handleClaimPlanet = async (planet) => {
-    if (!profile || !user) {
+    if (!profile || !user || !planet || planet.ownerId) {
       return;
     }
-    if (!planet.ownerId) {
-      await updatePlanetDocument(planet.planetId, {
+    if ((profile.fleetSize ?? 0) === 0) {
+      return;
+    }
+    const cost = getClaimCost(profile, planets);
+    if ((profile.nuts ?? 0) < cost) {
+      return;
+    }
+    const ownerUsername = profile.username || user.displayName || user.email?.split("@")[0] || "Commander";
+    const applyLocalClaim = () => {
+      updatePlanetLocally(planet.planetId, {
         ownerId: user.uid,
-        ownerUsername: profile.username,
+        ownerUsername,
         tradeRouteActive: false,
         isUnderAttack: false,
+        attackerId: null,
+        attackerUsername: null,
+        attackInitiatedAt: null,
+        attackEndsAt: null,
+        attackToken: null,
       });
-      if (!profile.homePlanetId) {
-        setProfile((prev) => {
-          if (!prev) {
-            return prev;
-          }
-          const next = {
-            ...prev,
-            homePlanetId: planet.planetId,
-          };
-          flushProfile(next);
-          return next;
-        });
-      }
+      setProfile((prev) => {
+        if (!prev || prev.nuts < cost) {
+          return prev;
+        }
+        const next = {
+          ...prev,
+          nuts: prev.nuts - cost,
+          homePlanetId: prev.homePlanetId || planet.planetId,
+        };
+        next.nutsPerSecond = deriveNps(next);
+        next.clickMultiplier = deriveClickMultiplier(next);
+        flushProfile(next);
+        return next;
+      });
+    };
+
+    if (!firebase.ready || !firebase.db) {
+      applyLocalClaim();
+      return;
     }
+
+    const planetRef = doc(firebase.db, "artifacts", APP_ID, "public", "data", "planets", planet.planetId);
+    try {
+      await runTransaction(firebase.db, async (transaction) => {
+        const snapshot = await transaction.get(planetRef);
+        if (!snapshot.exists()) {
+          throw new Error("Planet does not exist");
+        }
+        const existing = snapshot.data();
+        if (existing.ownerId) {
+          throw new Error("Planet already claimed");
+        }
+        transaction.update(planetRef, {
+          ownerId: user.uid,
+          ownerUsername,
+          tradeRouteActive: false,
+          isUnderAttack: false,
+          attackerId: null,
+          attackerUsername: null,
+          attackInitiatedAt: null,
+          attackEndsAt: null,
+          attackToken: null,
+          claimedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      });
+      applyLocalClaim();
+    } catch (err) {
+      console.error("Failed to claim planet", err);
+    }
+  };
+
+  const handleUpgradeDefense = async (planet) => {
+    if (!profile || !user || planet.ownerId !== user.uid) {
+      return;
+    }
+    if (planet.defenseLevel >= 10) {
+      return;
+    }
+    const cost = getDefenseUpgradeCost(planet);
+    if ((profile.nuts ?? 0) < cost) {
+      return;
+    }
+    const nextLevel = Math.min(10, (planet.defenseLevel ?? 1) + 1);
+    setProfile((prev) => {
+      if (!prev || prev.nuts < cost) {
+        return prev;
+      }
+      const next = {
+        ...prev,
+        nuts: prev.nuts - cost,
+      };
+      next.nutsPerSecond = deriveNps(next);
+      next.clickMultiplier = deriveClickMultiplier(next);
+      flushProfile(next);
+      return next;
+    });
+    await updatePlanetDocument(planet.planetId, {
+      defenseLevel: nextLevel,
+    });
   };
 
   const handleToggleTradeRoute = async (planet) => {
@@ -1321,7 +1949,9 @@ export default function NutInvadersApp() {
       return;
     }
     const togglingOn = !planet.tradeRouteActive;
-    const hasCapacity = (profile.tradeRoutes?.length || 0) < profile.fleetSize;
+    const capacity = getFleetCapacity(profile);
+    const used = profile.tradeRoutes?.length || 0;
+    const hasCapacity = used < capacity;
     if (togglingOn && !hasCapacity) {
       return;
     }
@@ -1346,18 +1976,12 @@ export default function NutInvadersApp() {
   };
 
   useEffect(() => {
-    if (!profile) {
-      return undefined;
-    }
     const interval = setInterval(() => {
-      if (!profile.tradeRoutes || profile.tradeRoutes.length === 0) {
-        return;
-      }
-      const payout = 500 * profile.tradeRoutes.length;
       setProfile((prev) => {
-        if (!prev) {
+        if (!prev || !prev.tradeRoutes || prev.tradeRoutes.length === 0) {
           return prev;
         }
+        const payout = deriveTradeRoutePayout(prev) * prev.tradeRoutes.length;
         const next = {
           ...prev,
           nuts: prev.nuts + payout,
@@ -1369,20 +1993,32 @@ export default function NutInvadersApp() {
       });
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [flushProfile, profile, setProfile]);
+  }, [flushProfile, setProfile]);
 
   const handleAttackPlanet = (planet) => {
-    if (!profile || !user || profile.fleetSize === 0) {
+    if (!profile || !user || (profile.fleetSize ?? 0) === 0 || planet.isUnderAttack) {
       return;
     }
-    setAttackTarget(planet);
+    const effectiveDefense = deriveEffectiveDefenseLevel(planet.defenseLevel, profile);
+    setAttackTarget({ ...planet, effectiveDefense, practice: false });
     setActiveTab("attack");
   };
 
-  const handleDefense = useCallback((planet) => {
-    setDefenseTarget(planet);
-    setActiveTab("defense");
-  }, []);
+  const handleDefense = useCallback(
+    (planet) => {
+      if (!planet) {
+        return;
+      }
+      setDefenseTarget((current) => {
+        if (current && current.attackToken === planet.attackToken) {
+          return current;
+        }
+        return { ...planet, practice: false };
+      });
+      setActiveTab("defense");
+    },
+    [setActiveTab]
+  );
 
   useEffect(() => {
     if (!firebase.db || !firebase.ready || !user) {
@@ -1393,7 +2029,9 @@ export default function NutInvadersApp() {
       snapshot.docChanges().forEach((change) => {
         const data = change.doc.data();
         if (data.ownerId === user.uid && data.isUnderAttack) {
-          handleDefense({ planetId: change.doc.id, ...data });
+          if (!data.attackEndsAt || data.attackEndsAt > Date.now()) {
+            handleDefense({ planetId: change.doc.id, ...data });
+          }
         }
       });
     });
@@ -1404,10 +2042,13 @@ export default function NutInvadersApp() {
     if (!attackTarget) {
       return;
     }
+    if (attackTarget.practice) {
+      setAttackTarget(null);
+      setActiveTab("arcade");
+      return;
+    }
     if (success) {
-      await updatePlanetDocument(attackTarget.planetId, {
-        isUnderAttack: true,
-      });
+      await initiatePlanetAttack(attackTarget);
     }
     setAttackTarget(null);
     setActiveTab("galaxy");
@@ -1417,20 +2058,85 @@ export default function NutInvadersApp() {
     if (!defenseTarget) {
       return;
     }
-    if (success) {
-      await updatePlanetDocument(defenseTarget.planetId, {
-        isUnderAttack: false,
-      });
-    } else {
-      await updatePlanetDocument(defenseTarget.planetId, {
-        isUnderAttack: false,
-        ownerId: null,
-        ownerUsername: null,
-      });
+    if (defenseTarget.practice) {
+      setDefenseTarget(null);
+      setActiveTab("arcade");
+      return;
     }
+    await finalizePlanetAttack(defenseTarget, success);
     setDefenseTarget(null);
     setActiveTab("galaxy");
   };
+
+  const handlePracticeAttack = useCallback(
+    (level) => {
+      const simulatedLevel = Math.max(1, Math.min(10, level));
+      setAttackTarget({
+        planetId: `simulation-${simulatedLevel}`,
+        name: `Simulator Stronghold Lv${simulatedLevel}`,
+        defenseLevel: simulatedLevel,
+        effectiveDefense: simulatedLevel,
+        practice: true,
+      });
+      setActiveTab("attack");
+    },
+    [setActiveTab]
+  );
+
+  const handlePracticeDefense = useCallback(
+    (level) => {
+      const simulatedLevel = Math.max(1, Math.min(10, level));
+      const deadline = Date.now() + ATTACK_WINDOW_MS;
+      setDefenseTarget({
+        planetId: `simulation-${simulatedLevel}`,
+        name: `Defense Drill Lv${simulatedLevel}`,
+        defenseLevel: simulatedLevel,
+        attackerUsername: "Simulator",
+        attackEndsAt: deadline,
+        practice: true,
+      });
+      setActiveTab("defense");
+    },
+    [setActiveTab]
+  );
+
+  useEffect(() => {
+    planets.forEach((planet) => {
+      if (!planet.isUnderAttack || !planet.attackEndsAt) {
+        return;
+      }
+      if (planet.attackEndsAt > Date.now()) {
+        return;
+      }
+      const key = planet.attackToken || planet.planetId;
+      if (resolvedAttacks.current.has(key)) {
+        return;
+      }
+      resolvedAttacks.current.add(key);
+      finalizePlanetAttack(planet, false);
+    });
+  }, [finalizePlanetAttack, planets]);
+
+  useEffect(() => {
+    if (!profile || profile.homePlanetId) {
+      return;
+    }
+    const owned = planets.find((planet) => planet.ownerId === profile.userId);
+    if (!owned) {
+      return;
+    }
+    setProfile((prev) => {
+      if (!prev || prev.homePlanetId) {
+        return prev;
+      }
+      const next = {
+        ...prev,
+        homePlanetId: owned.planetId,
+      };
+      flushProfile(next);
+      return next;
+    });
+  }, [flushProfile, planets, profile, setProfile]);
 
   useEffect(() => {
     if (activeTab === "factory") {
@@ -1471,10 +2177,11 @@ export default function NutInvadersApp() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden px-6 py-10">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.18),_transparent_65%)]" />
-      <div className="retro-grid -z-10" />
-      <div className="relative z-10 mx-auto max-w-6xl space-y-8">
+    <div className="crt-overlay">
+      <div className="relative min-h-screen overflow-hidden px-6 py-10">
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.18),_transparent_65%)]" />
+        <div className="retro-grid -z-10" />
+        <div className="relative z-10 mx-auto max-w-6xl space-y-8">
         <header className="retro-panel flex flex-col justify-between gap-4 p-6 md:flex-row md:items-center">
           <div>
             <h1 className="retro-heading text-3xl">Nut Invaders</h1>
@@ -1525,6 +2232,7 @@ export default function NutInvadersApp() {
           {activeTab === "factory" && (
             <FactoryTab
               profile={profile}
+              planets={planets}
               onClick={handleManualClick}
               onPurchaseUpgrade={handlePurchaseUpgrade}
               frenzyActive={frenzyActive}
@@ -1541,35 +2249,48 @@ export default function NutInvadersApp() {
           {activeTab === "galaxy" && (
             <GalaxyMap
               planets={planets}
-              currentUserId={user.uid}
-              homePlanetId={profile?.homePlanetId}
+              profile={profile}
               onClaimPlanet={handleClaimPlanet}
               onAttackPlanet={handleAttackPlanet}
               onToggleTradeRoute={handleToggleTradeRoute}
+              onUpgradeDefense={handleUpgradeDefense}
+            />
+          )}
+          {activeTab === "arcade" && (
+            <ArcadeDeck
+              onPracticeAttack={handlePracticeAttack}
+              onPracticeDefense={handlePracticeDefense}
             />
           )}
           {activeTab === "attack" && attackTarget && (
             <SpaceInvadersMinigame
-              defenseLevel={attackTarget.defenseLevel}
+              defenseLevel={attackTarget.effectiveDefense ?? attackTarget.defenseLevel}
+              practice={attackTarget.practice}
               onComplete={handleAttackComplete}
               onCancel={() => {
+                const wasPractice = attackTarget?.practice;
                 setAttackTarget(null);
-                setActiveTab("galaxy");
+                setActiveTab(wasPractice ? "arcade" : "galaxy");
               }}
             />
           )}
           {activeTab === "defense" && defenseTarget && (
             <DefenseMinigame
               defenseLevel={defenseTarget.defenseLevel}
+              attackerUsername={defenseTarget.attackerUsername}
+              attackDeadline={defenseTarget.attackEndsAt}
+              practice={defenseTarget.practice}
               onComplete={handleDefenseComplete}
               onCancel={() => {
+                const wasPractice = defenseTarget?.practice;
                 setDefenseTarget(null);
-                setActiveTab("galaxy");
+                setActiveTab(wasPractice ? "arcade" : "galaxy");
               }}
             />
           )}
           <Leaderboard planets={planets} />
         </main>
+        </div>
       </div>
     </div>
   );

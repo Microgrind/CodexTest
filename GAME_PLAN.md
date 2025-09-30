@@ -23,7 +23,7 @@
 | `nuts` | Number | Current spendable currency. |
 | `nutsPerSecond` | Number | Cached passive generation rate. |
 | `clickMultiplier` | Number | Multiplier applied to manual clicks. |
-| `upgrades` | Map | Levels per upgrade (`autoStroker`, `edgeMultiplier`, `goonerFlare`). |
+| `upgrades` | Map | Levels per upgrade (`autoStroker`, `roastingKiln`, `orbitalFoundry`, `edgeMultiplier`, `shellAblator`, `goonerFlare`, `orbitalTradeNet`, `wormholeBroker`, `commandBridge`, `siegeRelay`). |
 | `fleetSize` | Number | Active Nut Ships. |
 | `homePlanetId` | String / Null | Primary planet identifier. |
 | `tradeRoutes` | Array<String> | Planet IDs with active trade routes. |
@@ -41,6 +41,11 @@
 | `defenseLevel` | Number | Difficulty tier (1–10). |
 | `tradeRouteActive` | Boolean | Whether shipments are running. |
 | `isUnderAttack` | Boolean | Flag set when an offensive run is active. |
+| `attackerId` | String / Null | UID of the current attacker when under siege. |
+| `attackerUsername` | String / Null | Display label for the attacker. |
+| `attackInitiatedAt` | Number / Null | Epoch millis when the assault started. |
+| `attackEndsAt` | Number / Null | Epoch millis when the defender timeout expires. |
+| `attackToken` | String / Null | Unique identifier for the active assault to prevent stale updates. |
 
 ### 3.3 Username Registry – `/artifacts/{__app_id}/public/data/usernames/{usernameKey}`
 Ensures uniqueness when commanders register new accounts.
@@ -58,35 +63,51 @@ Ensures uniqueness when commanders register new accounts.
 
 ### 4.2 Factory Tab – Idle & Active Production
 - **NUT Button:** Large CTA awarding `1 × clickMultiplier` nuts per click with flashy feedback.
-- **Passive Income:** Auto-Stroker upgrade grants `+2 NPS` per level. `setInterval` ticks accumulate nuts locally; periodic writes push totals to Firestore.
+- **Passive Income Stack:**
+  - `autoStroker` grants `+2 NPS` per level.
+  - `orbitalFoundry` layers extra `+1` NPS on every Auto-Stroker level.
+  - `roastingKiln` multiplies total passive output by `+15%` per rank.
+- **Click Damage Stack:** `edgeMultiplier` (+0.5) and `shellAblator` (+0.75) amplify manual taps; frenzy windows double both active and passive gains.
 - **Frenzy Events:** `goonerFlare` upgrades raise the chance of triggering a 10-second `×2` multiplier every minute.
-- **UI:** Tailwind cards summarise balances, NPS, and upgrade catalog with exponential costs.
+- **Factory Dashboard:** Retro chips surface current nuts, NPS, click multiplier, trade yields, and route capacity.
+
+#### Upgrade Catalogue Overview
+- **Factory Systems:** `autoStroker`, `roastingKiln`, `orbitalFoundry` for raw NPS throughput.
+- **Manual Offense:** `edgeMultiplier`, `shellAblator` for active clicking potency.
+- **Logistics:** `orbitalTradeNet` (+25% route payout), `wormholeBroker` (-10% claim costs, floor 150), `commandBridge` (+1 trade capacity).
+- **Warfare:** `goonerFlare` (frenzy odds) and `siegeRelay` (-1 effective defense per rank during attacks).
 
 ### 4.3 Fleet Management
-- **Nut Ships:** Exponential cost curve (`200 × 1.65^fleetSize`). Required for trade routes and offensive actions.
-- **Trade Routes:** Resource planets can be toggled to ship 500 nuts every five minutes, consuming one ship per active route.
-- **Capacity Checks:** Route activation blocked if `tradeRoutes.length >= fleetSize`.
+- **Nut Ships:** Exponential cost curve (`200 × 1.65^fleetSize`). At least one physical ship is required before a commander can claim planets or launch attacks.
+- **Trade Routes:** Resource planets can be toggled to ship a base 500 nuts every five minutes. `orbitalTradeNet` multiplies this payout per route.
+- **Capacity Checks:** Available slots are `fleetSize + commandBridge bonus`. Route activation is blocked if the number of active routes meets this capacity.
 
 ### 4.4 Galaxy Map
-- **Real-Time Map:** `onSnapshot` on `planets` feeds dynamic grid cards showing ownership, defense, and status.
-- **Home Planet Assignment:** First successful claim locks `homePlanetId`.
-- **Interaction Rules:**
-  - Claim unowned planets (auto-assign if player lacks a home world).
-  - Toggle trade routes on owned resource planets.
-  - Attack enemy planets if fleet size > 0.
+- **Real-Time Map:** `onSnapshot` on `planets` feeds dynamic grid cards showing ownership, defense, and attack timers.
+- **Home Planet Assignment:** First successful claim (or conquest) locks `homePlanetId` automatically.
+- **Claiming Planets:** Requires at least one Nut Ship and payment of a scaling cost (`400 + 250 × ownedPlanets`, reduced by `wormholeBroker`). Claims populate attacker metadata fields with nulls and timestamp the purchase.
+- **Planet Management:**
+  - Toggle trade routes on owned resource planets (respecting capacity).
+  - Upgrade planetary defenses for nuts via `defenseLevel` increments (max 10), increasing attacker difficulty.
+  - Attack enemy planets only when they are not already under assault.
 
 ### 4.5 PvP Attack – Space Invaders Minigame
-- **Initiation:** Sets target planet `isUnderAttack = true` when attacker clears three waves.
-- **Difficulty Scaling:** Defense level increases invader rows, bullet speed, and hit points; higher tiers introduce denser waves.
+- **Initiation:** Attacker must clear three waves. Success writes assault metadata (`attackerId`, `attackToken`, `attackEndsAt = now + 5 minutes`). Failure simply closes the drill.
+- **Difficulty Scaling:** Planet `defenseLevel` boosts invader rows, bullet speed, and hit points. `siegeRelay` reduces effective defense for the attacker.
 - **Controls:** Arrow keys to move, Space/Up to fire.
-- **Outcome:** Success progresses to defender alert; failure leaves planet untouched and attacker stands down.
+- **Outcome:** Successful run flips `isUnderAttack` and alerts the defender; failure leaves the planet untouched and the token is not minted.
 
 ### 4.6 PvP Defense – Memory Lock Minigame
-- **Notification:** Owners receive live alert via snapshot change and can jump into defense tab.
-- **Mechanics:** Simon-style sequence grows with defense level (length 4→8, faster playback, more distractions).
-- **Result:** Successful defense clears `isUnderAttack`; failure wipes ownership and hands planet to attacker.
+- **Notification:** Owners receive live alert via snapshot change with attacker name and countdown. They have five real-time minutes to respond.
+- **Mechanics:** Simon-style sequence grows with defense level (length 4→8, faster playback, more distractions). Countdown auto-fails if untouched.
+- **Resolution:**
+  - Success clears attack metadata and retains ownership.
+  - Failure or timeout finalises the Firestore transaction to transfer ownership to the attacker, clearing trade routes and attack fields.
 
-### 4.7 Leaderboards
+### 4.7 Arcade Training
+- Dedicated tab hosts practice versions of both minigames with adjustable defense levels. Simulations do not mutate Firestore or resources.
+
+### 4.8 Leaderboards
 - Aggregated in-app by counting owned planets per commander (no extra collection required).
 
 ## V. Technical Considerations
