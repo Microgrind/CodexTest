@@ -1,6 +1,13 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ["./app/**/*.{js,jsx,ts,tsx}"],
+  safelist: [
+    "bg-amber-400",
+    "bg-emerald-400",
+    "bg-blue-400",
+    "bg-rose-400",
+    "ring-emerald-200",
+  ],
   theme: {
     extend: {
       fontFamily: {

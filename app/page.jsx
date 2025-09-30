@@ -532,6 +532,12 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
   const keysRef = useRef({});
   const livesRef = useRef(3);
   const animationRef = useRef(null);
+  const frameRef = useRef(0);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -544,6 +550,7 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
     const height = canvas.height;
     const enemySize = { width: 28, height: 20 };
     const spacing = { x: 38, y: 28 };
+    frameRef.current = 0;
 
     const drawPlayer = () => {
       const player = playerRef.current;
@@ -597,18 +604,24 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
     const createWave = (wave) => {
       const baseRows = 2 + Math.floor(defenseLevel / 3);
       const rows = Math.min(5, baseRows + wave - 1);
-      const cols = Math.min(9, 6 + Math.floor(defenseLevel / 2));
+      const cols = Math.min(7, 4 + Math.floor(defenseLevel / 2));
       const totalWidth = cols * enemySize.width + (cols - 1) * spacing.x;
-      const startX = Math.max(24, (width - totalWidth) / 2);
+      const startX = Math.max(36, (width - totalWidth) / 2);
       const enemies = [];
       for (let row = 0; row < rows; row += 1) {
         for (let col = 0; col < cols; col += 1) {
+          const originX = startX + col * (enemySize.width + spacing.x);
           enemies.push({
-            x: startX + col * (enemySize.width + spacing.x),
-            y: 40 + row * (enemySize.height + spacing.y),
+            x: originX,
+            originX,
+            y: -wave * 50 - row * 60,
             width: enemySize.width,
             height: enemySize.height,
             hp: defenseLevel >= 5 ? 2 : 1,
+            speed: 1.2 + wave * 0.25 + defenseLevel * 0.12 + row * 0.08,
+            amplitude: 14 + defenseLevel * 2 + row * 2,
+            phase: Math.random() * Math.PI * 2,
+            delay: col * 10 + row * 6,
           });
         }
       }
@@ -616,10 +629,15 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
         enemies.push({
           type: "boss",
           x: width / 2 - 60,
-          y: 40,
+          originX: width / 2 - 60,
+          y: -180,
           width: 120,
           height: 36,
           hp: 6 + Math.floor(defenseLevel / 2),
+          speed: 0.85 + defenseLevel * 0.1,
+          amplitude: 32 + defenseLevel * 2,
+          phase: Math.random() * Math.PI * 2,
+          delay: 40,
         });
       }
       enemiesRef.current = enemies;
@@ -633,7 +651,11 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
       enemyBulletsRef.current = [];
       playerRef.current.x = width / 2 - playerRef.current.width / 2;
       createWave(1);
-      setMessage(practice ? "Simulation Wave 1" : "Wave 1");
+      setMessage(
+        practice
+          ? "Simulation Wave 1 — intercept the incoming fighters."
+          : "Wave 1 — intercept the incoming fighters."
+      );
     };
 
     resetGame();
@@ -670,10 +692,11 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
 
     let shootCooldown = 0;
     let enemyCooldown = 0;
-    let direction = 1;
 
     const loop = () => {
       animationRef.current = requestAnimationFrame(loop);
+      frameRef.current += 1;
+      const frame = frameRef.current;
       ctx.fillStyle = "#010b19";
       ctx.fillRect(0, 0, width, height);
 
@@ -708,32 +731,53 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
         ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
       });
 
-      const baseHorizontalSpeed = 0.4 + defenseLevel * 0.06 + waveRef.current * 0.12;
-      let minX = width;
-      let maxX = 0;
+      let ended = false;
+      const updatedEnemies = [];
       enemiesRef.current.forEach((enemy) => {
-        minX = Math.min(minX, enemy.x);
-        maxX = Math.max(maxX, enemy.x + enemy.width);
-      });
-      if (maxX >= width - 24) {
-        direction = -1;
-        enemiesRef.current = enemiesRef.current.map((enemy) => ({
-          ...enemy,
-          y: enemy.y + 12,
-        }));
-      } else if (minX <= 24) {
-        direction = 1;
-        enemiesRef.current = enemiesRef.current.map((enemy) => ({
-          ...enemy,
-          y: enemy.y + 12,
-        }));
-      }
-      enemiesRef.current = enemiesRef.current.map((enemy) => ({
-        ...enemy,
-        x: enemy.x + baseHorizontalSpeed * direction,
-      }));
+        const nextEnemy = { ...enemy };
+        if (nextEnemy.delay > 0) {
+          nextEnemy.delay -= 1;
+          nextEnemy.y += nextEnemy.speed * 0.35;
+        } else {
+          nextEnemy.y += nextEnemy.speed;
+          if (typeof nextEnemy.originX === "number") {
+            const swing = Math.sin((frame + nextEnemy.phase) * 0.08) * nextEnemy.amplitude;
+            nextEnemy.x = Math.max(
+              24,
+              Math.min(width - nextEnemy.width - 24, nextEnemy.originX + swing)
+            );
+          } else {
+            nextEnemy.x += Math.sin((frame + nextEnemy.phase) * 0.05) * 2;
+          }
+        }
 
-      enemiesRef.current.forEach((enemy) => drawInvader(enemy));
+        if (nextEnemy.y > height - 36 && nextEnemy.type !== "boss") {
+          livesRef.current -= 1;
+          setMessage(
+            livesRef.current > 0
+              ? `Breached the line! Lives remaining: ${livesRef.current}`
+              : practice
+              ? "Simulation failed."
+              : "Bomb run failed."
+          );
+          if (livesRef.current <= 0) {
+            cancelAnimationFrame(animationRef.current);
+            onCompleteRef.current?.(false);
+            ended = true;
+            return;
+          }
+          return;
+        }
+
+        if (nextEnemy.y < height + 60) {
+          drawInvader(nextEnemy);
+          updatedEnemies.push(nextEnemy);
+        }
+      });
+      enemiesRef.current = updatedEnemies;
+      if (ended) {
+        return;
+      }
 
       bulletsRef.current.forEach((bullet) => {
         enemiesRef.current.forEach((enemy) => {
@@ -753,7 +797,9 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
 
       enemyCooldown -= 1;
       if (enemyCooldown <= 0 && enemiesRef.current.length > 0) {
-        const shooters = enemiesRef.current.filter((_, index) => index % 2 === 0);
+        const shooters = enemiesRef.current.filter(
+          (enemy, index) => enemy.delay <= 0 && index % 2 === 0
+        );
         shooters.forEach((enemy) => {
           const baseChance = enemy.type === "boss" ? 0.18 : 0.04;
           if (Math.random() < baseChance + defenseLevel * 0.012) {
@@ -790,7 +836,7 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
           );
           if (livesRef.current <= 0) {
             cancelAnimationFrame(animationRef.current);
-            onComplete?.(false);
+            onCompleteRef.current?.(false);
           }
         }
       });
@@ -800,8 +846,10 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
         waveRef.current += 1;
         if (waveRef.current > 3) {
           cancelAnimationFrame(animationRef.current);
-          onComplete?.(true);
-          setMessage(practice ? "Simulation complete!" : "Bomb planted! Await defender response.");
+          onCompleteRef.current?.(true);
+          setMessage(
+            practice ? "Simulation complete!" : "Bomb planted! Await defender response."
+          );
         } else {
           setMessage(practice ? `Simulation Wave ${waveRef.current}` : `Wave ${waveRef.current}`);
           createWave(waveRef.current);
@@ -821,7 +869,7 @@ function SpaceInvadersMinigame({ defenseLevel, practice = false, onComplete, onC
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [defenseLevel, onComplete, practice]);
+  }, [defenseLevel, practice]);
 
   return (
     <div className="retro-panel space-y-4 p-6 text-emerald-100">
@@ -858,6 +906,12 @@ function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, pract
   const [round, setRound] = useState(0);
   const [isShowing, setIsShowing] = useState(false);
   const [displayIndex, setDisplayIndex] = useState(-1);
+  const [status, setStatus] = useState(
+    practice
+      ? "Press begin to start the simulation."
+      : "Press begin to start defusing."
+  );
+  const [activePad, setActivePad] = useState(null);
   const roundRef = useRef(0);
   const targetRounds = 3;
   const [timeLeft, setTimeLeft] = useState(() => (attackDeadline ? attackDeadline - Date.now() : null));
@@ -874,6 +928,7 @@ function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, pract
       const timeout = setTimeout(() => {
         setIsShowing(false);
         setDisplayIndex(-1);
+        setStatus("Awaiting your input...");
       }, displaySpeed);
       return () => clearTimeout(timeout);
     }
@@ -914,6 +969,12 @@ function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, pract
     setIsShowing(false);
     setDisplayIndex(-1);
     setTimeLeft(attackDeadline ? attackDeadline - Date.now() : null);
+    setStatus(
+      practice
+        ? "Press begin to start the simulation."
+        : "Press begin to start defusing."
+    );
+    setActivePad(null);
   }, [attackDeadline, practice]);
 
   const generateSequence = useCallback(() => {
@@ -929,6 +990,7 @@ function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, pract
     setInputIndex(0);
     setIsShowing(true);
     setDisplayIndex(0);
+    setStatus("Memorize the sequence...");
   }, [sequence.length]);
 
   const startNextRound = useCallback(() => {
@@ -940,6 +1002,8 @@ function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, pract
     setInputIndex(0);
     setIsShowing(true);
     setDisplayIndex(0);
+    setStatus(`Showing sequence ${nextRound} of ${targetRounds}...`);
+    setActivePad(null);
   }, [generateSequence]);
 
   const handlePlayerPress = (index) => {
@@ -947,12 +1011,18 @@ function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, pract
       return;
     }
     const expected = sequence[inputIndex];
+    setActivePad(index);
+    setTimeout(() => setActivePad(null), 160);
     if (index === expected) {
+      const progress = inputIndex + 1;
+      setStatus(`Sequence input ${progress}/${sequence.length}`);
       if (inputIndex + 1 >= sequence.length) {
         if (roundRef.current >= targetRounds) {
           roundRef.current = 0;
+          setStatus(practice ? "Simulation complete!" : "Bomb defused!");
           onComplete?.(true);
         } else {
+          setStatus("Sequence correct! Preparing next pattern...");
           startNextRound();
         }
       } else {
@@ -960,6 +1030,7 @@ function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, pract
       }
     } else {
       roundRef.current = 0;
+      setStatus(practice ? "Simulation failed." : "Sequence broken! The bomb detonates.");
       onComplete?.(false);
     }
   };
@@ -971,6 +1042,8 @@ function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, pract
       showSequence();
     }
   };
+
+  const highlightedIndex = isShowing ? sequence[displayIndex] : activePad;
 
   return (
     <div className="retro-panel space-y-4 p-6 text-emerald-100">
@@ -989,6 +1062,7 @@ function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, pract
           ? "Run simulations to memorize the sequence order. Difficulty scales with defense level."
           : `Repeat ${targetRounds} sequences to diffuse the bomb from ${attackerUsername || "an invader"}.`}
       </p>
+      <p className="text-xs text-emerald-200/70">{status}</p>
       {!practice && typeof timeLeft === "number" && (
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-rose-200">
           Time Remaining: {`${Math.max(0, Math.floor(timeLeft / 60000))}:${String(
@@ -996,13 +1070,13 @@ function DefenseMinigame({ defenseLevel, attackerUsername, attackDeadline, pract
           ).padStart(2, "0")}`}
         </p>
       )}
-      <div className="mx-auto grid w-full max-w-xs grid-cols-2 gap-3">
+      <div className="mx-auto grid w-full max-w-[180px] grid-cols-2 gap-2">
         {DEFENSE_SEQUENCE_COLORS.map((color, index) => (
           <button
             key={color}
             type="button"
             className={`aspect-square rounded-xl border-2 border-emerald-400/40 ${color} transition-transform hover:scale-105 ${
-              isShowing && sequence[displayIndex] === index ? "ring-4 ring-emerald-200" : ""
+              highlightedIndex === index ? "ring-4 ring-emerald-200" : ""
             }`}
             onClick={() => handlePlayerPress(index)}
           />
