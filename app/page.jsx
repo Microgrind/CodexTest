@@ -135,10 +135,10 @@ const TABS = [
 ];
 
 const PLANET_COLORS = {
-  unclaimed: "bg-slate-700 border-slate-500",
-  player: "bg-emerald-600 border-emerald-400",
-  enemy: "bg-purple-600 border-purple-400",
-  attack: "bg-red-600 border-red-400 animate-pulse",
+  unclaimed: "border-emerald-500/40 bg-emerald-900/40",
+  player: "border-emerald-200 bg-emerald-500/40 shadow-[0_0_18px_rgba(74,222,128,0.55)]",
+  enemy: "border-cyan-300/70 bg-emerald-950/60",
+  attack: "border-rose-300 bg-rose-700/50 shadow-[0_0_20px_rgba(251,113,133,0.6)] animate-pulse",
 };
 
 function getUpgradeLevel(profile, id) {
@@ -544,25 +544,25 @@ function SpaceInvadersMinigame({ defenseLevel, onComplete, onCancel }) {
   }, [defenseLevel, onComplete]);
 
   return (
-    <div className="space-y-3">
+    <div className="retro-panel space-y-4 p-6 text-emerald-100">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-cyan-300">Space Invaders Offensive</h3>
+        <h3 className="retro-subheading text-lg font-semibold text-emerald-200">Space Invaders Offensive</h3>
         <button
           type="button"
-          className="rounded bg-slate-700 px-3 py-1 text-sm font-medium text-slate-200 hover:bg-slate-600"
+          className="retro-button retro-button--danger px-4 py-1 text-xs"
           onClick={onCancel}
         >
           Cancel
         </button>
       </div>
-      <p className="text-sm text-slate-300">{message}</p>
+      <p className="text-sm text-emerald-200/80">{message}</p>
       <canvas
         ref={canvasRef}
         width={600}
         height={400}
-        className="w-full rounded border border-slate-600 bg-slate-900"
+        className="w-full rounded border border-emerald-400/40 bg-emerald-950/60 shadow-[0_0_20px_rgba(16,185,129,0.35)]"
       />
-      <p className="text-xs text-slate-400">Controls: Arrow keys to move, Space/Up to fire.</p>
+      <p className="text-xs text-emerald-200/70">Controls: Arrow keys to move, Space/Up to fire.</p>
     </div>
   );
 }
@@ -627,18 +627,18 @@ function DefenseMinigame({ defenseLevel, onComplete, onCancel }) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="retro-panel space-y-4 p-6 text-emerald-100">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-rose-200">Defense Memory Lock</h3>
+        <h3 className="retro-subheading text-lg font-semibold text-emerald-200">Defense Memory Lock</h3>
         <button
           type="button"
-          className="rounded bg-slate-700 px-3 py-1 text-sm font-medium text-slate-200 hover:bg-slate-600"
+          className="retro-button retro-button--danger px-4 py-1 text-xs"
           onClick={onCancel}
         >
           Leave
         </button>
       </div>
-      <p className="text-sm text-slate-300">
+      <p className="text-sm text-emerald-200/80">
         Repeat {targetRounds} sequences to diffuse the bomb. Difficulty scales with defense level.
       </p>
       <div className="grid grid-cols-2 gap-4">
@@ -646,20 +646,20 @@ function DefenseMinigame({ defenseLevel, onComplete, onCancel }) {
           <button
             key={color}
             type="button"
-            className={`aspect-square rounded-xl border-2 border-slate-700 ${color} transition-transform hover:scale-105 ${
-              isShowing && sequence[displayIndex] === index ? "ring-4 ring-white" : ""
+            className={`aspect-square rounded-xl border-2 border-emerald-400/40 ${color} transition-transform hover:scale-105 ${
+              isShowing && sequence[displayIndex] === index ? "ring-4 ring-emerald-200" : ""
             }`}
             onClick={() => handlePlayerPress(index)}
           />
         ))}
       </div>
-      <div className="flex items-center gap-2 text-xs text-slate-400">
+      <div className="flex items-center gap-2 text-xs text-emerald-200/70">
         <span>Round: {round}</span>
         <span>Sequence Length: {sequenceLength}</span>
       </div>
       <button
         type="button"
-        className="rounded bg-emerald-500 px-4 py-2 font-semibold text-slate-900 hover:bg-emerald-400"
+        className="retro-button"
         onClick={startRound}
       >
         {round === 0 ? "Begin Defense" : "Replay Sequence"}
@@ -684,20 +684,20 @@ function Leaderboard({ planets }) {
 
   if (leaderboard.length === 0) {
     return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-4 text-sm text-slate-300">
+      <div className="retro-panel p-4 text-sm text-emerald-200/80">
         Colonize your first planet to appear on the leaderboard.
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-900/70 p-4">
-      <h4 className="text-lg font-semibold text-cyan-200">Planetary Supremacy</h4>
-      <ul className="mt-3 space-y-2 text-sm text-slate-200">
+    <div className="retro-panel p-5 text-emerald-100">
+      <h4 className="retro-subheading text-lg font-semibold text-emerald-200">Planetary Supremacy</h4>
+      <ul className="mt-3 space-y-2 text-sm text-emerald-100/90">
         {leaderboard.map((entry, index) => (
           <li key={entry.username} className="flex items-center justify-between">
-            <span className="font-medium text-slate-100">#{index + 1} {entry.username}</span>
-            <span className="text-cyan-300">{entry.planetsOwned} planets</span>
+            <span className="font-medium text-emerald-100">#{index + 1} {entry.username}</span>
+            <span className="text-emerald-200">{entry.planetsOwned} planets</span>
           </li>
         ))}
       </ul>
@@ -707,10 +707,10 @@ function Leaderboard({ planets }) {
 
 function GalaxyMap({ planets, currentUserId, homePlanetId, onClaimPlanet, onAttackPlanet, onToggleTradeRoute }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-semibold text-cyan-200">Nut Galaxy</h3>
-        <p className="text-sm text-slate-300">Tap a planet to manage ownership and routes.</p>
+    <div className="retro-panel space-y-4 p-6 text-emerald-100">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <h3 className="retro-subheading text-xl font-semibold text-emerald-200">Nut Galaxy</h3>
+        <p className="text-sm text-emerald-200/70">Tap a planet to manage ownership and routes.</p>
       </div>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
         {planets.map((planet) => {
@@ -726,22 +726,22 @@ function GalaxyMap({ planets, currentUserId, homePlanetId, onClaimPlanet, onAtta
           return (
             <div
               key={planet.planetId}
-              className={`flex h-full flex-col justify-between rounded-xl border p-4 shadow-lg transition-transform hover:-translate-y-1 ${cardColor}`}
+              className={`flex h-full flex-col justify-between rounded-xl border p-4 shadow-[0_0_18px_rgba(16,185,129,0.35)] transition-transform hover:-translate-y-1 ${cardColor}`}
             >
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-semibold text-slate-100">
+                  <h4 className="text-lg font-semibold text-emerald-100">
                     {planet.name}
-                    {isHome && <span className="ml-2 rounded bg-slate-900/40 px-2 py-0.5 text-xs uppercase text-cyan-200">Home</span>}
+                    {isHome && <span className="retro-chip ml-2 inline-block px-2 py-0.5 text-[0.6rem] uppercase tracking-[0.25em]">Home</span>}
                   </h4>
-                  <span className="rounded bg-slate-900/40 px-2 py-1 text-xs font-bold uppercase tracking-wide text-slate-200">
+                  <span className="retro-chip inline-block px-2 py-1 text-[0.6rem] font-bold uppercase tracking-[0.25em]">
                     {planet.function}
                   </span>
                 </div>
-                <p className="text-sm text-slate-100">
+                <p className="text-sm text-emerald-100">
                   Defense Level: <span className="font-semibold">{planet.defenseLevel}</span>
                 </p>
-                <p className="text-xs text-slate-200">
+                <p className="text-xs text-emerald-200/70">
                   Status: {isUnderAttack ? "Under Attack" : isUnclaimed ? "Unclaimed" : `Controlled by ${planet.ownerUsername}`}
                 </p>
               </div>
@@ -749,7 +749,7 @@ function GalaxyMap({ planets, currentUserId, homePlanetId, onClaimPlanet, onAtta
                 {isUnclaimed ? (
                   <button
                     type="button"
-                    className="w-full rounded bg-emerald-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-emerald-300"
+                    className="retro-button w-full"
                     onClick={() => onClaimPlanet?.(planet)}
                   >
                     Claim Planet
@@ -757,7 +757,7 @@ function GalaxyMap({ planets, currentUserId, homePlanetId, onClaimPlanet, onAtta
                 ) : isPlayer ? (
                   <button
                     type="button"
-                    className="w-full rounded bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-300"
+                    className="retro-button w-full"
                     onClick={() => onToggleTradeRoute?.(planet)}
                   >
                     {planet.tradeRouteActive ? "Deactivate" : "Activate"} Trade Route
@@ -765,7 +765,7 @@ function GalaxyMap({ planets, currentUserId, homePlanetId, onClaimPlanet, onAtta
                 ) : (
                   <button
                     type="button"
-                    className="w-full rounded bg-rose-500 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-400"
+                    className="retro-button retro-button--danger w-full"
                     onClick={() => onAttackPlanet?.(planet)}
                   >
                     Attack Planet
@@ -791,45 +791,45 @@ function FleetManagement({ profile, onBuyShip, onToggleTradeRoute, planets }) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-6">
-        <h3 className="text-xl font-semibold text-cyan-200">Nut Fleet Command</h3>
-        <p className="mt-2 text-sm text-slate-300">
+      <div className="retro-panel p-6 text-emerald-100">
+        <h3 className="retro-subheading text-xl font-semibold text-emerald-200">Nut Fleet Command</h3>
+        <p className="mt-2 text-sm text-emerald-200/70">
           Expand your fleet to unlock simultaneous trade routes and offensive capacity.
         </p>
-        <div className="mt-4 flex flex-wrap items-center gap-4 text-slate-100">
-          <div className="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-3">
-            <p className="text-xs uppercase tracking-wide text-slate-400">Fleet Size</p>
-            <p className="text-2xl font-bold text-emerald-300">{profile?.fleetSize ?? 0}</p>
+        <div className="mt-4 flex flex-wrap items-center gap-4 text-emerald-100">
+          <div className="retro-chip px-5 py-3">
+            <p className="text-[0.55rem] uppercase tracking-[0.3em] text-emerald-200/70">Fleet Size</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-200">{profile?.fleetSize ?? 0}</p>
           </div>
-          <div className="rounded-lg border border-slate-600 bg-slate-800/60 px-4 py-3">
-            <p className="text-xs uppercase tracking-wide text-slate-400">Next Ship Cost</p>
-            <p className="text-2xl font-bold text-cyan-300">{formatNumber(nextShipCost)} nuts</p>
+          <div className="retro-chip px-5 py-3">
+            <p className="text-[0.55rem] uppercase tracking-[0.3em] text-emerald-200/70">Next Ship Cost</p>
+            <p className="mt-1 text-2xl font-bold text-emerald-200">{formatNumber(nextShipCost)} nuts</p>
           </div>
           <button
             type="button"
-            className="rounded bg-emerald-400 px-4 py-2 font-semibold text-slate-900 hover:bg-emerald-300"
+            className="retro-button"
             onClick={() => onBuyShip(nextShipCost)}
           >
             Buy Nut Ship
           </button>
         </div>
       </div>
-      <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-6">
-        <h4 className="text-lg font-semibold text-cyan-100">Trade Routes</h4>
+      <div className="retro-panel p-6 text-emerald-100">
+        <h4 className="retro-subheading text-lg font-semibold text-emerald-200">Trade Routes</h4>
         {ownedPlanets.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-300">
+          <p className="mt-2 text-sm text-emerald-200/70">
             Claim a Resource Planet to start extracting nuts via trade routes.
           </p>
         ) : (
-          <ul className="mt-4 space-y-3 text-sm text-slate-200">
+          <ul className="mt-4 space-y-3 text-sm text-emerald-100/90">
             {ownedPlanets.map((planet) => (
               <li
                 key={planet.planetId}
-                className="flex items-center justify-between rounded border border-slate-700 bg-slate-800/60 px-3 py-2"
+                className="flex items-center justify-between rounded-lg border border-emerald-500/40 bg-emerald-950/50 px-3 py-2 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
               >
                 <div>
-                  <p className="font-semibold text-slate-100">{planet.name}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="font-semibold text-emerald-100">{planet.name}</p>
+                  <p className="text-xs text-emerald-200/70">
                     {planet.tradeRouteActive
                       ? "Route active: delivering 500 nuts every 5 minutes"
                       : "Route idle: deploy a ship to begin shipments"}
@@ -837,10 +837,10 @@ function FleetManagement({ profile, onBuyShip, onToggleTradeRoute, planets }) {
                 </div>
                 <button
                   type="button"
-                  className={`rounded px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                  className={`rounded px-3 py-1 text-xs font-semibold uppercase tracking-wide shadow-[0_0_12px_rgba(16,185,129,0.35)] ${
                     planet.tradeRouteActive
-                      ? "bg-rose-500 text-white hover:bg-rose-400"
-                      : "bg-emerald-400 text-slate-900 hover:bg-emerald-300"
+                      ? "border border-rose-300 bg-rose-600/80 text-white hover:bg-rose-500/90"
+                      : "border border-emerald-300 bg-emerald-500/80 text-emerald-950 hover:bg-emerald-400/90"
                   }`}
                   onClick={() => onToggleTradeRoute?.(planet)}
                 >
@@ -864,19 +864,19 @@ function UpgradePanel({ profile, onPurchase }) {
         return (
           <div
             key={upgrade.id}
-            className="rounded-xl border border-slate-700 bg-slate-900/70 p-4 shadow-lg"
+            className="retro-panel p-5 text-emerald-100"
           >
             <div className="flex items-center justify-between">
-              <h4 className="text-lg font-semibold text-cyan-200">{upgrade.label}</h4>
-              <span className="text-xs uppercase tracking-wide text-slate-400">Lvl {level}</span>
+              <h4 className="retro-subheading text-lg font-semibold text-emerald-200">{upgrade.label}</h4>
+              <span className="text-xs uppercase tracking-[0.3em] text-emerald-200/70">Lvl {level}</span>
             </div>
-            <p className="mt-2 text-sm text-slate-300">{upgrade.description}</p>
-            <p className="mt-4 text-sm font-semibold text-emerald-300">
+            <p className="mt-3 text-sm text-emerald-200/80">{upgrade.description}</p>
+            <p className="mt-4 text-sm font-semibold text-emerald-200">
               Cost: {formatNumber(cost)} nuts
             </p>
             <button
               type="button"
-              className="mt-4 w-full rounded bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-300"
+              className="retro-button mt-4 w-full"
               onClick={() => onPurchase(upgrade)}
             >
               Purchase
@@ -952,71 +952,73 @@ function AuthPanel({ auth, db, ready, onEnterPreview }) {
   };
 
   return (
-    <div className="mx-auto max-w-md rounded-2xl border border-slate-700 bg-slate-900/80 p-6 text-slate-100 shadow-xl">
-      <h2 className="text-2xl font-bold text-cyan-200">Nut Invaders HQ</h2>
-      <p className="mt-2 text-sm text-slate-300">
-        {ready
-          ? "Authenticate to join the galactic nut offensive."
-          : "Firebase credentials missing. Enter preview mode to play locally with a simulated commander profile."}
-      </p>
-      <div className="mt-4 space-y-4">
-        {mode === "register" && (
+    <div className="mx-auto max-w-md space-y-4 rounded-2xl">
+      <div className="retro-panel p-6 text-emerald-100">
+        <h2 className="retro-heading text-xl">Nut Invaders HQ</h2>
+        <p className="mt-3 text-sm text-emerald-200/80">
+          {ready
+            ? "Authenticate to join the galactic nut offensive."
+            : "Firebase credentials missing. Enter preview mode to play locally with a simulated commander profile."}
+        </p>
+        <div className="mt-5 space-y-4">
+          {mode === "register" && (
+            <div>
+              <label className="text-xs uppercase tracking-[0.25em] text-emerald-200/70">Username</label>
+              <input
+                type="text"
+                className="retro-input mt-1"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="Commander"
+              />
+            </div>
+          )}
           <div>
-            <label className="text-xs uppercase tracking-wide text-slate-400">Username</label>
+            <label className="text-xs uppercase tracking-[0.25em] text-emerald-200/70">Email</label>
             <input
-              type="text"
-              className="mt-1 w-full rounded border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-cyan-400 focus:outline-none"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              placeholder="Commander"
+              type="email"
+              className="retro-input mt-1"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="pilot@nuts.space"
             />
           </div>
-        )}
-        <div>
-          <label className="text-xs uppercase tracking-wide text-slate-400">Email</label>
-          <input
-            type="email"
-            className="mt-1 w-full rounded border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-cyan-400 focus:outline-none"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="pilot@nuts.space"
-          />
-        </div>
-        <div>
-          <label className="text-xs uppercase tracking-wide text-slate-400">Password</label>
-          <input
-            type="password"
-            className="mt-1 w-full rounded border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-cyan-400 focus:outline-none"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="••••••••"
-          />
-        </div>
-        {error && <p className="text-sm text-rose-400">{error}</p>}
-        <button
-          type="button"
-          className="w-full rounded bg-cyan-400 px-4 py-2 font-semibold text-slate-900 hover:bg-cyan-300"
-          onClick={mode === "login" ? handleLogin : handleRegister}
-          disabled={loading}
-        >
-          {loading ? "Processing..." : mode === "login" ? "Log In" : "Sign Up"}
-        </button>
-        <button
-          type="button"
-          className="w-full rounded border border-cyan-400 px-4 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-400/10"
-          onClick={() => setMode((prev) => (prev === "login" ? "register" : "login"))}
-        >
-          {mode === "login" ? "Need an account? Register" : "Already enlisted? Log in"}
-        </button>
-        {!ready && (
+          <div>
+            <label className="text-xs uppercase tracking-[0.25em] text-emerald-200/70">Password</label>
+            <input
+              type="password"
+              className="retro-input mt-1"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+          {error && <p className="text-sm text-rose-400">{error}</p>}
           <button
             type="button"
-            className="w-full rounded border border-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-400/10"
-            onClick={() => onEnterPreview?.()}
+            className="retro-button w-full"
+            onClick={mode === "login" ? handleLogin : handleRegister}
+            disabled={loading}
           >
-            Enter Preview Mode
+            {loading ? "Processing..." : mode === "login" ? "Log In" : "Sign Up"}
           </button>
-        )}
+          <button
+            type="button"
+            className="retro-button retro-button--ghost w-full"
+            onClick={() => setMode((prev) => (prev === "login" ? "register" : "login"))}
+          >
+            {mode === "login" ? "Need an account? Register" : "Already enlisted? Log in"}
+          </button>
+          {!ready && (
+            <button
+              type="button"
+              className="retro-button w-full"
+              onClick={() => onEnterPreview?.()}
+            >
+              Enter Preview Mode
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1027,8 +1029,8 @@ function NutButton({ onClick, frenzyActive }) {
     <button
       type="button"
       onClick={onClick}
-      className={`relative mx-auto block h-48 w-48 rounded-full border-4 border-cyan-300 bg-gradient-to-br from-amber-400 via-orange-500 to-amber-600 text-3xl font-black text-slate-900 shadow-[0_0_25px_rgba(34,211,238,0.6)] transition-transform hover:scale-105 ${
-        frenzyActive ? "animate-pulse" : ""
+      className={`relative mx-auto block h-48 w-48 rounded-full border-4 border-emerald-300 bg-[radial-gradient(circle_at_top,_rgba(74,222,128,0.95),_rgba(21,128,61,0.9))] text-3xl font-black text-emerald-950 shadow-[0_0_45px_rgba(74,222,128,0.6)] transition-transform hover:scale-105 ${
+        frenzyActive ? "animate-[pulse_1s_ease-in-out_infinite]" : ""
       }`}
     >
       NUT
@@ -1045,24 +1047,24 @@ function FactoryTab({ profile, onClick, onPurchaseUpgrade, frenzyActive }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[1fr,2fr]">
-        <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 text-center text-slate-100">
-          <h3 className="text-xl font-semibold text-cyan-200">Nut Foundry</h3>
-          <p className="mt-2 text-sm text-slate-300">
+        <div className="retro-panel p-6 text-center text-emerald-100">
+          <h3 className="retro-subheading text-xl font-semibold text-emerald-200">Nut Foundry</h3>
+          <p className="mt-2 text-sm text-emerald-200/70">
             Smash the NUT button to squeeze out precious currency. Passive factories scale with your Auto-Stroker network.
           </p>
           <div className="mt-6 flex flex-col items-center justify-center space-y-4">
-            <div className="text-4xl font-black text-emerald-300">
-              {formatNumber(profile?.nuts ?? 0)} <span className="text-base font-semibold text-slate-300">NUTS</span>
+            <div className="retro-text-glow text-4xl font-black text-emerald-200">
+              {formatNumber(profile?.nuts ?? 0)} <span className="text-base font-semibold text-emerald-200/80">NUTS</span>
             </div>
-            <div className="text-sm font-semibold text-cyan-200">
+            <div className="text-sm font-semibold text-emerald-200/80">
               {deriveNps(profile).toFixed(1)} NPS • Click Multiplier ×{deriveClickMultiplier(profile).toFixed(2)}
             </div>
             <NutButton onClick={onClick} frenzyActive={frenzyActive} />
           </div>
         </div>
-        <div className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 text-slate-100">
-          <h4 className="text-lg font-semibold text-cyan-100">Upgrades</h4>
-          <p className="mt-2 text-sm text-slate-300">
+        <div className="retro-panel p-6 text-emerald-100">
+          <h4 className="retro-subheading text-lg font-semibold text-emerald-200">Upgrades</h4>
+          <p className="mt-2 text-sm text-emerald-200/70">
             Balance your production chain with synergistic upgrades. Costs scale exponentially, so diversify investments.
           </p>
           <div className="mt-4">
@@ -1469,28 +1471,30 @@ export default function NutInvadersApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 text-slate-100">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <header className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl md:flex-row md:items-center">
+    <div className="relative min-h-screen overflow-hidden px-6 py-10">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.18),_transparent_65%)]" />
+      <div className="retro-grid -z-10" />
+      <div className="relative z-10 mx-auto max-w-6xl space-y-8">
+        <header className="retro-panel flex flex-col justify-between gap-4 p-6 md:flex-row md:items-center">
           <div>
-            <h1 className="text-3xl font-black text-cyan-200">Nut Invaders</h1>
-            <p className="text-sm text-slate-300">
+            <h1 className="retro-heading text-3xl">Nut Invaders</h1>
+            <p className="mt-2 text-sm text-emerald-200/80">
               Multiplayer incremental strategy. Conquer the Nut Galaxy with industrial finesse and arcade mastery.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-4">
             <div className="text-right text-sm">
-              <p className="font-semibold text-emerald-300">{profile?.username}</p>
-              <p className="text-xs text-slate-400">{Math.floor(profile?.nuts ?? 0).toLocaleString()} nuts</p>
+              <p className="retro-text-glow font-semibold text-emerald-200">{profile?.username}</p>
+              <p className="text-xs text-emerald-200/70">{Math.floor(profile?.nuts ?? 0).toLocaleString()} nuts</p>
             </div>
             {previewMode && (
-              <span className="rounded-full border border-emerald-400 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-200">
+              <span className="retro-chip text-xs font-semibold uppercase tracking-wide text-emerald-100">
                 Preview Mode
               </span>
             )}
             <button
               type="button"
-              className="rounded border border-rose-400 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-500/10"
+              className="retro-button retro-button--danger px-5 py-2 text-xs"
               onClick={handleLogout}
             >
               Log out
@@ -1507,11 +1511,9 @@ export default function NutInvadersApp() {
                 key={tab.id}
                 type="button"
                 onClick={() => !disabled && setActiveTab(tab.id)}
-                className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
-                  activeTab === tab.id
-                    ? "bg-cyan-400 text-slate-900 shadow"
-                    : "bg-slate-800 text-slate-200 hover:bg-slate-700"
-                } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
+                className={`${activeTab === tab.id ? "retro-tab retro-tab--active" : "retro-tab"} ${
+                  disabled ? "cursor-not-allowed opacity-40" : ""
+                }`}
               >
                 {tab.label}
               </button>
@@ -1519,7 +1521,7 @@ export default function NutInvadersApp() {
           })}
         </nav>
 
-        <main className="space-y-6">
+        <main className="space-y-8">
           {activeTab === "factory" && (
             <FactoryTab
               profile={profile}
