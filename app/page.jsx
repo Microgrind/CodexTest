@@ -35,6 +35,14 @@ const firebaseConfig = {
 
 let cachedFirebase = null;
 
+const PREVIEW_USER = {
+  uid: "preview-user",
+  displayName: "Preview Commander",
+  email: "preview@local",
+};
+
+const PREVIEW_STORAGE_KEY = "nut-invaders-preview-profile";
+
 function ensureFirebase() {
   if (cachedFirebase) {
     return cachedFirebase;
@@ -207,18 +215,75 @@ function usePlanets(db, ready) {
   return [planets, setPlanets];
 }
 
-function useUserProfile(db, ready, user) {
+function useUserProfile(db, ready, user, previewMode) {
   const [profile, setProfile] = useState(null);
+  const previewLoadedRef = useRef(false);
+
   const profileRef = useMemo(() => {
-    if (!ready || !db || !user) {
+    if (previewMode || !ready || !db || !user) {
       return null;
     }
     return doc(db, "artifacts", APP_ID, "users", user.uid, "user_data");
-  }, [db, ready, user]);
+  }, [db, previewMode, ready, user]);
 
   useEffect(() => {
-    if (!profileRef) {
-      setProfile(null);
+    if (!previewMode) {
+      previewLoadedRef.current = false;
+      return;
+    }
+    if (previewLoadedRef.current) {
+      return;
+    }
+    previewLoadedRef.current = true;
+    if (typeof window === "undefined") {
+      setProfile({
+        ...INITIAL_USER_STATE,
+        userId: PREVIEW_USER.uid,
+        username: user?.displayName || PREVIEW_USER.displayName,
+      });
+      return;
+    }
+    try {
+      const stored = window.localStorage.getItem(PREVIEW_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setProfile({
+          ...INITIAL_USER_STATE,
+          ...parsed,
+          userId: PREVIEW_USER.uid,
+          username: parsed.username || PREVIEW_USER.displayName,
+        });
+        return;
+      }
+    } catch (err) {
+      console.warn("Failed to load preview profile", err);
+    }
+    setProfile({
+      ...INITIAL_USER_STATE,
+      userId: PREVIEW_USER.uid,
+      username: user?.displayName || PREVIEW_USER.displayName,
+    });
+  }, [previewMode, user?.displayName]);
+
+  useEffect(() => {
+    if (!previewMode || !profile || typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        PREVIEW_STORAGE_KEY,
+        JSON.stringify({
+          ...profile,
+          userId: PREVIEW_USER.uid,
+        })
+      );
+    } catch (err) {
+      console.warn("Failed to persist preview profile", err);
+    }
+  }, [previewMode, profile]);
+
+  useEffect(() => {
+    if (previewMode || !profileRef) {
       return undefined;
     }
     const unsubscribe = onSnapshot(profileRef, (snapshot) => {
@@ -229,10 +294,10 @@ function useUserProfile(db, ready, user) {
       setProfile(snapshot.data());
     });
     return () => unsubscribe();
-  }, [profileRef]);
+  }, [previewMode, profileRef]);
 
   useEffect(() => {
-    if (!profileRef || !db || !ready || !user || profile) {
+    if (previewMode || !profileRef || !db || !ready || !user || profile) {
       return;
     }
     const initializeProfile = async () => {
@@ -249,7 +314,7 @@ function useUserProfile(db, ready, user) {
       });
     };
     initializeProfile();
-  }, [db, profile, profileRef, ready, user]);
+  }, [db, previewMode, profile, profileRef, ready, user]);
 
   return [profile, setProfile, profileRef];
 }
@@ -823,7 +888,7 @@ function UpgradePanel({ profile, onPurchase }) {
   );
 }
 
-function AuthPanel({ auth, db, ready }) {
+function AuthPanel({ auth, db, ready, onEnterPreview }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -892,7 +957,7 @@ function AuthPanel({ auth, db, ready }) {
       <p className="mt-2 text-sm text-slate-300">
         {ready
           ? "Authenticate to join the galactic nut offensive."
-          : "Provide Firebase environment variables to enable authentication."}
+          : "Firebase credentials missing. Enter preview mode to play locally with a simulated commander profile."}
       </p>
       <div className="mt-4 space-y-4">
         {mode === "register" && (
@@ -943,6 +1008,15 @@ function AuthPanel({ auth, db, ready }) {
         >
           {mode === "login" ? "Need an account? Register" : "Already enlisted? Log in"}
         </button>
+        {!ready && (
+          <button
+            type="button"
+            className="w-full rounded border border-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-400/10"
+            onClick={() => onEnterPreview?.()}
+          >
+            Enter Preview Mode
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1002,8 +1076,11 @@ function FactoryTab({ profile, onClick, onPurchaseUpgrade, frenzyActive }) {
 
 export default function NutInvadersApp() {
   const firebase = useFirebaseServices();
-  const user = useFirebaseUser(firebase.auth);
-  const [profile, setProfile, profileRef] = useUserProfile(firebase.db, firebase.ready, user);
+  const [previewActive, setPreviewActive] = useState(false);
+  const previewMode = !firebase.ready && previewActive;
+  const authUser = useFirebaseUser(firebase.auth);
+  const user = previewMode ? PREVIEW_USER : authUser;
+  const [profile, setProfile, profileRef] = useUserProfile(firebase.db, firebase.ready, user, previewMode);
   const [planets, setPlanets] = usePlanets(firebase.db, firebase.ready);
   const [activeTab, setActiveTab] = useState("factory");
   const [attackTarget, setAttackTarget] = useState(null);
@@ -1013,11 +1090,27 @@ export default function NutInvadersApp() {
 
   const flushProfile = useCallback(
     async (nextProfile) => {
-      if (!profileRef || !firebase.db || !firebase.ready) {
-        return;
-      }
       const payload = nextProfile || profile;
       if (!payload) {
+        return;
+      }
+      if (previewMode) {
+        if (typeof window !== "undefined") {
+          try {
+            window.localStorage.setItem(
+              PREVIEW_STORAGE_KEY,
+              JSON.stringify({
+                ...payload,
+                userId: PREVIEW_USER.uid,
+              })
+            );
+          } catch (err) {
+            console.warn("Failed to persist preview profile", err);
+          }
+        }
+        return;
+      }
+      if (!profileRef || !firebase.db || !firebase.ready) {
         return;
       }
       await setDoc(
@@ -1029,7 +1122,7 @@ export default function NutInvadersApp() {
         { merge: true }
       );
     },
-    [firebase.db, firebase.ready, profile, profileRef]
+    [firebase.db, firebase.ready, previewMode, profile, profileRef]
   );
 
   useEffect(() => {
@@ -1349,8 +1442,30 @@ export default function NutInvadersApp() {
     }
   }, [activeTab, attackTarget, defenseTarget]);
 
+  const handleLogout = () => {
+    if (previewMode) {
+      setPreviewActive(false);
+      setProfile(null);
+      setActiveTab("factory");
+      setAttackTarget(null);
+      setDefenseTarget(null);
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(PREVIEW_STORAGE_KEY);
+      }
+      return;
+    }
+    signOut(firebase.auth);
+  };
+
   if (!user) {
-    return <AuthPanel auth={firebase.auth} db={firebase.db} ready={firebase.ready} />;
+    return (
+      <AuthPanel
+        auth={firebase.auth}
+        db={firebase.db}
+        ready={firebase.ready}
+        onEnterPreview={() => setPreviewActive(true)}
+      />
+    );
   }
 
   return (
@@ -1368,10 +1483,15 @@ export default function NutInvadersApp() {
               <p className="font-semibold text-emerald-300">{profile?.username}</p>
               <p className="text-xs text-slate-400">{Math.floor(profile?.nuts ?? 0).toLocaleString()} nuts</p>
             </div>
+            {previewMode && (
+              <span className="rounded-full border border-emerald-400 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-200">
+                Preview Mode
+              </span>
+            )}
             <button
               type="button"
               className="rounded border border-rose-400 px-4 py-2 text-sm font-semibold text-rose-200 hover:bg-rose-500/10"
-              onClick={() => signOut(firebase.auth)}
+              onClick={handleLogout}
             >
               Log out
             </button>
