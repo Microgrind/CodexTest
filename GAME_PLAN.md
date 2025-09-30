@@ -1,132 +1,106 @@
-# Space Invader Cookie Clicker – Product & Technical Plan
+# Nut Invaders: Multiplayer Incremental Strategy Specification
 
-## 1. Concept Overview
-- **Theme:** Retro-inspired space invasion where “cookies” are re-imagined as *energy cores* used to build a conquering armada.
-- **Goal:** Accumulate energy cores by clicking a central reactor and investing in upgrades that unlock fleets, stations, and planetary conquest.
-- **Platform:** Next.js app with client-heavy gameplay, serverless persistence, and responsive UI.
+## I. Overview and Theme
+- **Game Title:** Nut Invaders
+- **Genre:** Incremental Clicker / Multiplayer Strategy / Arcade Minigame Hybrid
+- **Tone & Style:** Retro sci-fi with dark humor and nut iconography. Neon palettes, pixel art accents, CRT-inspired UI chrome.
 
-## 2. Core Gameplay Loop
-1. **Click** on the energy reactor to generate cores.
-2. **Spend** cores on upgrades that automate core production or increase click value.
-3. **Unlock** new fleets, technologies, and planets as total cores and achievements rise.
-4. **Prestige** by conquering a galaxy, resetting progress for permanent buffs.
+## II. Technical Stack & Architecture
+| Component | Technology | Notes |
+| --- | --- | --- |
+| Frontend | React (single Next.js `app/page.jsx`) | Client components orchestrate factory, fleet, galaxy, and minigames in one JSX surface. |
+| Styling | Tailwind CSS | Utility-first styling for rapid iteration and consistent neon aesthetic. |
+| Game Logic & Minigames | React state + Canvas API | Space-Invaders shooter and Simon-style memory lock rendered directly on `<canvas>`/DOM. |
+| Database | Firebase Firestore | Stores player profiles, fleet status, and global planet map under `/artifacts/{__app_id}/`. |
+| Authentication | Firebase Auth | Email/password auth, username claims, and session persistence. |
 
-## 3. Production Systems & Economy
-### 3.1 Resources
-- **Primary currency:** Energy cores (EC).
-- **Secondary:** Fleet power (FP) – accumulates passively from ships; required to conquer planets.
-- **Prestige token:** Galactic influence (GI) earned after conquering a full sector.
+## III. Data Model (Firestore Structure)
+### 3.1 Users – `/artifacts/{__app_id}/users/{userId}/user_data`
+| Field | Type | Description |
+| --- | --- | --- |
+| `userId` | String | Firebase UID. |
+| `username` | String | Unique commander alias. |
+| `nuts` | Number | Current spendable currency. |
+| `nutsPerSecond` | Number | Cached passive generation rate. |
+| `clickMultiplier` | Number | Multiplier applied to manual clicks. |
+| `upgrades` | Map | Levels per upgrade (`autoStroker`, `edgeMultiplier`, `goonerFlare`). |
+| `fleetSize` | Number | Active Nut Ships. |
+| `homePlanetId` | String / Null | Primary planet identifier. |
+| `tradeRoutes` | Array<String> | Planet IDs with active trade routes. |
+| `frenzyBoostUntil` | Timestamp / Null | Client-driven frenzy window for doubled output. |
 
-### 3.2 Production Sources
-| Producer | Unlock Condition | Base Cost (EC) | Cost Growth | Base Output (EC/s) | Notes |
-|----------|-----------------|----------------|-------------|--------------------|-------|
-| Reactor Overclock | Default | 15 | ×1.15 | +1 per click | Click upgrade, scales click value. |
-| Drone Swarm | Reach 30 EC | 100 | ×1.15 | 2 | Low-tier passive production. |
-| Asteroid Miner | Own 10 Drones | 500 | ×1.17 | 10 | Introduces FP trickle (+0.1/s). |
-| Orbital Factory | Total EC ≥ 5K | 2,500 | ×1.18 | 45 | Adds FP bonus of +0.5/s. |
-| Battlecruiser Yard | Conquer 1 planet | 12,000 | ×1.2 | 180 | Unlocks planetary assault missions. |
-| Quantum Forge | FP ≥ 5,000 | 75,000 | ×1.22 | 900 | Provides multiplicative boost to all passive producers (+3% per level). |
-| Stellar Gate | GI ≥ 1 | 400,000 | ×1.25 | 4,500 | Late-game prestige structure, +5% EC from all sources per Gate. |
+### 3.2 Planets – `/artifacts/{__app_id}/public/data/planets/{planetId}`
+| Field | Type | Description |
+| --- | --- | --- |
+| `planetId` | String | Unique identifier (`P-101`). |
+| `name` | String | Nut-themed planet name. |
+| `coordinates` | Map | `{ x: Number, y: Number }` for map plotting. |
+| `ownerId` | String / Null | UID of current owner. |
+| `ownerUsername` | String / Null | Display name for map labels. |
+| `function` | String | `RESOURCE` or `POWER` bonus classification. |
+| `defenseLevel` | Number | Difficulty tier (1–10). |
+| `tradeRouteActive` | Boolean | Whether shipments are running. |
+| `isUnderAttack` | Boolean | Flag set when an offensive run is active. |
 
-- **Balanced scaling:** Early tiers use gentle multipliers (1.15–1.18) to encourage breadth; higher tiers escalate to maintain challenge.
-- **Soft caps:** Introduce diminishing returns after 200 units per building (cost multiplier increases by +0.02) to avoid runaway inflation.
+### 3.3 Username Registry – `/artifacts/{__app_id}/public/data/usernames/{usernameKey}`
+Ensures uniqueness when commanders register new accounts.
 
-### 3.3 Click Mechanics
-- Base click = 1 EC; each Reactor Overclock adds +1 EC and +0.5% bonus to all EC/s.
-- **Combo meter:** Clicking continuously fills a 10-stack combo (+2% per stack to click value, decays after 3 seconds idle).
+## IV. Core Gameplay Loops
+### 4.1 Authentication & Profile Initialization
+1. Player signs up with Firebase Auth (email/password).
+2. Transaction reserves lowercase username doc and seeds `user_data` with:
+   - `nuts: 10`
+   - `nutsPerSecond: 0`
+   - `fleetSize: 0`
+   - `upgrades: {}`
+   - `tradeRoutes: []`
+3. Real-time listeners hydrate UI and keep Firestore in sync (throttled writes every 10 seconds + beforeunload).
 
-## 4. Unlock & Progression Flow
-1. **Tutorial Stage (0–1K EC):** Focus on clicking, unlocking Drone Swarm and early Reactor upgrades.
-2. **Industrial Stage (1K–50K EC):** Asteroid Miners and Orbital Factories ramp passive income, FP begins to matter.
-3. **Military Stage (50K–2M EC):** Battlecruiser Yards unlock assault missions. Players must invest in FP for planet conquests.
-4. **Ascension Stage (2M+ EC):** Quantum Forges and Stellar Gates prepare for prestige runs.
+### 4.2 Factory Tab – Idle & Active Production
+- **NUT Button:** Large CTA awarding `1 × clickMultiplier` nuts per click with flashy feedback.
+- **Passive Income:** Auto-Stroker upgrade grants `+2 NPS` per level. `setInterval` ticks accumulate nuts locally; periodic writes push totals to Firestore.
+- **Frenzy Events:** `goonerFlare` upgrades raise the chance of triggering a 10-second `×2` multiplier every minute.
+- **UI:** Tailwind cards summarise balances, NPS, and upgrade catalog with exponential costs.
 
-### Planet Conquest
-- Planets require a mix of EC investment and FP thresholds.
-- Example curve:
-  | Planet | Required FP | EC Investment | Reward |
-  |--------|-------------|---------------|--------|
-  | Lunar Outpost | 500 | 25K | Unlocks Battlecruiser Yard, +5% global EC/s. |
-  | Red Dwarf Colony | 2,000 | 150K | +1 GI shard, +10% ship attack speed. |
-  | Gas Giant Stronghold | 8,000 | 600K | Unlock Quantum Forge research. |
-  | Binary Star Fortress | 25,000 | 3M | Earn 1 GI and unlock Stellar Gates. |
+### 4.3 Fleet Management
+- **Nut Ships:** Exponential cost curve (`200 × 1.65^fleetSize`). Required for trade routes and offensive actions.
+- **Trade Routes:** Resource planets can be toggled to ship 500 nuts every five minutes, consuming one ship per active route.
+- **Capacity Checks:** Route activation blocked if `tradeRoutes.length >= fleetSize`.
 
-- **Balancing lever:** FP decays by 2% on defeat, encouraging diversified investment without hard punishment.
+### 4.4 Galaxy Map
+- **Real-Time Map:** `onSnapshot` on `planets` feeds dynamic grid cards showing ownership, defense, and status.
+- **Home Planet Assignment:** First successful claim locks `homePlanetId`.
+- **Interaction Rules:**
+  - Claim unowned planets (auto-assign if player lacks a home world).
+  - Toggle trade routes on owned resource planets.
+  - Attack enemy planets if fleet size > 0.
 
-## 5. Upgrade System
-### 5.1 Tiered Upgrade Tracks
-- **Click Enhancements:** Increase EC per click, add splash damage that generates FP on critical hits.
-- **Automation Boosters:** Multiplicative EC/s bonuses tied to owning sets of buildings (e.g., 25 Drone Swarms = +10% Drone EC/s).
-- **Fleet Tech:** Spend FP on permanent bonuses (e.g., "Plasma Cannons" give +5% FP generation).
-- **Planetary Policies:** Unlocked per conquered planet; act as passive cards that can be equipped (limit 3, expandable to 5 via Stellar Gates).
+### 4.5 PvP Attack – Space Invaders Minigame
+- **Initiation:** Sets target planet `isUnderAttack = true` when attacker clears three waves.
+- **Difficulty Scaling:** Defense level increases invader rows, bullet speed, and hit points; higher tiers introduce denser waves.
+- **Controls:** Arrow keys to move, Space/Up to fire.
+- **Outcome:** Success progresses to defender alert; failure leaves planet untouched and attacker stands down.
 
-### 5.2 Balancing Strategy
-- Unlock requirements scale on *total EC earned* rather than current balance to avoid brick walls.
-- Each new building introduces either a new mechanic (FP, missions, prestige) or strengthens existing systems to keep engagement high.
-- Periodic **challenge missions** grant time-limited buffs, encouraging active play without making idle players fall behind.
+### 4.6 PvP Defense – Memory Lock Minigame
+- **Notification:** Owners receive live alert via snapshot change and can jump into defense tab.
+- **Mechanics:** Simon-style sequence grows with defense level (length 4→8, faster playback, more distractions).
+- **Result:** Successful defense clears `isUnderAttack`; failure wipes ownership and hands planet to attacker.
 
-## 6. Prestige & Long-Term Goals
-- **Trigger:** Conquer all planets in a sector (e.g., 6 planets).
-- **Reset:** EC, buildings, FP reset; retain achievements and GI.
-- **Rewards:** Spend GI on galaxy-wide buffs (e.g., +10% EC/s, +1% FP generation, unlock cosmetic ship skins).
-- **Meta Progression:** Multiple sectors with escalating requirements keep the long tail engaging.
+### 4.7 Leaderboards
+- Aggregated in-app by counting owned planets per commander (no extra collection required).
 
-## 7. UI/UX Direction
-- **Layout:**
-  - Left: Reactor click area with retro CRT effects and combo meter.
-  - Center: Production panel with buildings/upgrades in tiered cards.
-  - Right: Planetary map displaying FP, missions, and conquest progress.
-- **Art Direction:** Pixel-art ships, neon vector overlays, starfield background.
-- **Feedback:** Explosions and sound pips on clicks, animated ship launch when purchasing Battlecruisers.
-- **Accessibility:** High-contrast color palette, toggle for reduced motion, keyboard shortcuts for key actions.
+## V. Technical Considerations
+- **Single JSX Surface:** All React components live in `app/page.jsx` to satisfy the single-file requirement.
+- **Offline Fallbacks:** When Firebase config is absent, the UI seeds mock planets and uses local state so designers can explore flows without a backend.
+- **Sync Strategy:** Local state mutates instantly; writes are debounced (10s interval + unload event) to limit Firestore churn.
+- **Access Control:** Firebase security rules (out of scope here) must ensure players can only mutate their own profile, manage owned planets, and toggle attack flags appropriately.
 
-## 8. Technical Implementation (Next.js)
-- **Framework:** Next.js App Router with React Server Components for static data (upgrade definitions) and Client Components for interactive gameplay.
-- **State Management:** Zustand or Redux Toolkit for deterministic game state; actions typed with TypeScript.
-- **Persistence:**
-  - LocalStorage for offline progression snapshot (auto-save every 10 seconds).
-  - Optional sign-in with NextAuth + Prisma (SQLite or PlanetScale) to sync across devices.
-- **Serverless Functions:**
-  - `/api/sync` – saves compressed game state.
-  - `/api/leaderboard` – reads aggregated stats.
-- **Deterministic Tick:** Web Worker managing EC/s and FP updates at 10 Hz to avoid main-thread lag.
-- **Testing:** Vitest + React Testing Library for UI, Playwright for regression of core loop.
+## VI. Roadmap & Enhancements
+1. **Art & Audio:** Replace placeholder gradients with authentic pixel assets and chiptune SFX.
+2. **Balancing:** Tune upgrade curves, ship costs, and frenzy cadence using telemetry.
+3. **Alliances:** Introduce factions, shared defense, and trade bonuses.
+4. **Prestige:** Add seasonal resets with meta-upgrades to extend replayability.
+5. **Mobile UX:** Optimize tap targets and canvas controls for touch devices.
 
-## 9. Data Structures & Balancing Hooks
-```ts
-// Example TypeScript schemas
-export interface BuildingDefinition {
-  id: string;
-  name: string;
-  baseCost: number;
-  costGrowth: number;
-  baseOutput: number;
-  fpOutput?: number;
-  unlock: UnlockCondition;
-}
-
-export type UnlockCondition =
-  | { type: 'totalCores'; amount: number }
-  | { type: 'owned'; buildingId: string; count: number }
-  | { type: 'planetConquered'; planetId: string }
-  | { type: 'currency'; key: 'fp' | 'gi'; amount: number };
-```
-- Maintain JSON definitions to enable balance tweaks without touching logic.
-- Provide editor tools (simple admin page) to adjust values and preview DPS curves.
-
-## 10. Roadmap
-1. **MVP (Week 1–2):** Reactor clicker, Drone Swarm, Asteroid Miner, basic UI, local persistence.
-2. **Content Expansion (Week 3–4):** Add FP, Orbital Factory, Battlecruiser Yard, first two planets.
-3. **Prestige & Meta (Week 5):** Implement GI, Stellar Gates, leaderboards.
-4. **Polish (Week 6):** Pixel art, animations, SFX, accessibility options, performance pass.
-
-## 11. Analytics & Balancing
-- Track session length, time-to-first-planet, average GI per prestige.
-- Use telemetry to adjust cost multipliers (aim for 20–30 minutes to first prestige cycle).
-- A/B test FP decay values and combo meter impact to keep active play rewarding but optional.
-
-## 12. Risks & Mitigations
-- **Runaway inflation:** Solve with soft caps and multiplicative buffs tied to achievements.
-- **Player churn after prestige:** Introduce unique narrative snippets and cosmetics each sector.
-- **Performance:** Offload tick loop to Worker, memoize expensive React components.
-
+## VII. Final Goal
+Colonize and defend the majority of planets. Leaderboards surface the top commanders by planet count, celebrating the most relentless nut hoarders in the galaxy.
